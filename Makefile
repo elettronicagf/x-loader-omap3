@@ -53,7 +53,7 @@ export	ARCH CPU BOARD VENDOR
 include $(TOPDIR)/config.mk
 
 ifndef CROSS_COMPILE
-CROSS_COMPILE = arm-none-linux-gnueabi-
+CROSS_COMPILE = arm-angstrom-linux-gnueabi-
 #CROSS_COMPILE = arm-linux-
 export	CROSS_COMPILE
 endif
@@ -82,7 +82,7 @@ SUBDIRS	=
 
 ALL = x-load.bin System.map
 
-all:		$(ALL)
+all:		$(ALL) x-load.bin.ift
 
 ift:	$(ALL) x-load.bin.ift
 
@@ -165,6 +165,8 @@ overo_config :	unconfig
 omap3530beagle_config :    unconfig
 	@./mkconfig $(@:_config=) arm omap3 omap3530beagle
 
+omap3egf_config :    unconfig
+	@./mkconfig $(@:_config=) arm omap3 omap3egf
 #########################################################################
 ## OMAP4 (ARM-CortexA9) Systems
 #########################################################################

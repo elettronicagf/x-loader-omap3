@@ -36,7 +36,7 @@
 #include <asm/arch/mem.h>
 
 const char version_string[] =
-	"Texas Instruments X-Loader 1.4.4ss (" __DATE__ " - " __TIME__ ")";
+	"Texas Instruments X-Loader 1.4.4ss - eGF v1.00 (" __DATE__ " - " __TIME__ ")";
 
 int print_info(void)
 {
@@ -64,8 +64,8 @@ init_fnc_t *init_sequence[] = {
 #ifdef CFG_NS16550_SERIAL
  	serial_init,		/* serial communications setup */
 #endif
+//  	nand_init,		/* board specific nand init */
 	print_info,
-  	nand_init,		/* board specific nand init */
 #ifdef CONFIG_MMC
 #ifdef CONFIG_DRIVER_OMAP34XX_I2C
 	init_func_i2c,
