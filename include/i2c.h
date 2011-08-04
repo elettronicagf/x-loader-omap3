@@ -47,14 +47,21 @@
 #define I2C_RXTX_LEN	128	/* maximum tx/rx buffer length */
 
 #if defined(CONFIG_I2C_MULTI_BUS)
-#define CFG_MAX_I2C_BUS		2
+#if !defined(CONFIG_SYS_MAX_I2C_BUS)
+#define CONFIG_SYS_MAX_I2C_BUS		2
+#endif
 #define I2C_GET_BUS()		i2c_get_bus_num()
 #define I2C_SET_BUS(a)		i2c_set_bus_num(a)
 #else
-#define CFG_MAX_I2C_BUS		1
+#define CONFIG_SYS_MAX_I2C_BUS		1
 #define I2C_GET_BUS()		0
 #define I2C_SET_BUS(a)
 #endif
+
+#ifdef CONFIG_DRIVER_OMAP34XX_I2C
+#define TWL4030_I2C_BUS			0
+#endif
+
 
 /* define the I2C bus number for RTC and DTT if not already done */
 #if !defined(CFG_RTC_BUS_NUM)
@@ -97,11 +104,6 @@ int i2c_probe(uchar chip);
 int i2c_read(uchar chip, uint addr, int alen, uchar *buffer, int len);
 int i2c_write(uchar chip, uint addr, int alen, uchar *buffer, int len);
 
-/*
- * Utility routines to read/write registers.
- */
-uchar i2c_reg_read (uchar chip, uchar reg);
-void  i2c_reg_write(uchar chip, uchar reg, uchar val);
 
 /*
  * Functions for setting the current I2C bus and its speed

@@ -35,10 +35,12 @@
 #include <asm/arch/sys_info.h>
 #include <asm/arch/clocks.h>
 #include <asm/arch/mem.h>
+#include <i2c.h>
 
 #define CORE_DPLL_PARAM_M2	0x09
 #define CORE_DPLL_PARAM_M	0x360
 #define CORE_DPLL_PARAM_N	0xC
+
 
 /* CPU types */
 #define CPU_DM37XX	0x1
@@ -56,10 +58,10 @@ struct dpll_param {
 typedef struct dpll_param dpll_param;
 
 /* Following functions are exported from lowlevel_init.S */
-extern dpll_param *get_mpu_dpll_param();
-extern dpll_param *get_iva_dpll_param();
-extern dpll_param *get_core_dpll_param();
-extern dpll_param *get_per_dpll_param();
+extern dpll_param *get_mpu_dpll_param(void);
+extern dpll_param *get_iva_dpll_param(void);
+extern dpll_param *get_core_dpll_param(void);
+extern dpll_param *get_per_dpll_param(void);
 
 #define __raw_readl(a)		(*(volatile unsigned int *)(a))
 #define __raw_writel(v, a)	(*(volatile unsigned int *)(a) = (v))
@@ -207,31 +209,6 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 
 #ifdef CFG_3430SDRAM_DDR
 
-#define MICRON_DDR	0
-#define NUMONYX_MCP	1
-int identify_xm_ddr()
-{
-	int	mfr, id;
-
-	__raw_writel(M_NAND_GPMC_CONFIG1, GPMC_CONFIG1 + GPMC_CONFIG_CS0);
-	__raw_writel(M_NAND_GPMC_CONFIG2, GPMC_CONFIG2 + GPMC_CONFIG_CS0);
-	__raw_writel(M_NAND_GPMC_CONFIG3, GPMC_CONFIG3 + GPMC_CONFIG_CS0);
-	__raw_writel(M_NAND_GPMC_CONFIG4, GPMC_CONFIG4 + GPMC_CONFIG_CS0);
-	__raw_writel(M_NAND_GPMC_CONFIG5, GPMC_CONFIG5 + GPMC_CONFIG_CS0);
-	__raw_writel(M_NAND_GPMC_CONFIG6, GPMC_CONFIG6 + GPMC_CONFIG_CS0);
-
-	/* Enable the GPMC Mapping */
-	__raw_writel((((OMAP34XX_GPMC_CS0_SIZE & 0xF)<<8) |
-			     ((NAND_BASE_ADR>>24) & 0x3F) |
-			     (1<<6)),  (GPMC_CONFIG7 + GPMC_CONFIG_CS0));
-	delay(2000);
-
-	nand_readid(&mfr, &id);
-	if (mfr == 0)
-		return MICRON_DDR;
-	if ((mfr == 0x20) && (id == 0xba))
-		return NUMONYX_MCP;
-}
 /*********************************************************************
  * config_3430sdram_ddr() - Init DDR on 3430SDP dev board.
  *********************************************************************/

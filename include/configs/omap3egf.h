@@ -41,16 +41,20 @@
 #define CONFIG_OMAP3_EGF	1	/* working with Elettronica GF Evaluation Board */
 
 
+
+/* Enable the I2C driver */
+#define CFG_I2C_SPEED		100000
+#define CFG_I2C_SLAVE		1
+#define CFG_I2C_BUS		0
+#define CFG_I2C_BUS_SELECT	1
+#define CONFIG_DRIVER_OMAP34XX_I2C 1
+#define CONFIG_I2C_MULTI_BUS		1
+
 /* Enable the below macro if MMC boot support is required */
 #define CONFIG_MMC	1
 #if defined(CONFIG_MMC)
 	#define CFG_CMD_MMC		1
 	#define CFG_CMD_FAT		1
-	#define CFG_I2C_SPEED		100000
-	#define CFG_I2C_SLAVE		1
-	#define CFG_I2C_BUS		0
-	#define CFG_I2C_BUS_SELECT	1
-	#define CONFIG_DRIVER_OMAP34XX_I2C 1
 #endif
 
 #include <asm/arch/cpu.h>        /* get chip and board defs */
@@ -124,7 +128,7 @@
  */
 
 
-#define CFG_NAND_K9F1G08R0A
+//#define CFG_NAND_K9F1G08R0A
 #define NAND_16BIT
 
 /* NAND is partitioned:

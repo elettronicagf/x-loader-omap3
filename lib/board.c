@@ -35,6 +35,12 @@
 #include <fat.h>
 #include <asm/arch/mem.h>
 
+#ifdef CONFIG_DRIVER_OMAP34XX_I2C
+#include <i2c.h>
+#endif
+#ifdef CONFIG_MMC
+#include <mmc.h>
+#endif
 const char version_string[] =
 	"Texas Instruments X-Loader 1.4.4ss - eGF v1.00 (" __DATE__ " - " __TIME__ ")";
 

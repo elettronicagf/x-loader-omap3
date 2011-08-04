@@ -58,7 +58,7 @@ block_dev_desc_t *mmc_get_dev(int dev)
 void twl4030_mmc_config(void)
 {
 	unsigned char data;
-
+	i2c_set_bus_num(TWL4030_I2C_BUS);
 	data = 0x20;
 	i2c_write(0x4B, 0x82, 1, &data, 1);
 	data = 0x2;
@@ -98,7 +98,7 @@ void mmc_init_stream(void)
 		mmc_stat = OMAP_HSMMC_STAT;
 	} while (!(mmc_stat & CC_MASK));
 
-	OMAP_HSMMC_STAT = OMAP_HSMMC_STAT;
+//	OMAP_HSMMC_STAT = OMAP_HSMMC_STAT;
 	OMAP_HSMMC_CON &= ~INIT_INITSTREAM;
 }
 

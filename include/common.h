@@ -62,12 +62,12 @@ int 	board_init (void);
 int 	nand_init (void);
 int     mmc_boot (unsigned char *buf);
 void	board_hang (void);
+void 	udelay (unsigned long usec);
+int     misc_init_r(void);
+u32     get_mem_type(void);
 
 /* cpu/$(CPU)/cpu.c */
 int 	cpu_init (void);
-#ifdef  CFG_UDELAY
-void 	udelay (unsigned long usec);
-#endif
 
 /* nand driver */
 #define NAND_CMD_READ0		0
@@ -107,4 +107,7 @@ int 	nand_correct_data (u_char *dat, u_char *read_ecc, u_char *calc_ecc);
 
 /* lib/board.c */
 void	hang		(void) __attribute__ ((noreturn));
+
+/* common/cmd_load.c */
+int do_load_serial_bin (ulong offset, int baudrate);
 #endif	/* __COMMON_H_ */
