@@ -73,6 +73,7 @@ Directory Hierarchy:
 Software Configuration:
 =======================
 	cd x-loader-omap3
+	make distclean
 	make omap3egf_config
 
 After a board has been configured, type "make" to build it supposing the

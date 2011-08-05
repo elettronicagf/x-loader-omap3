@@ -59,7 +59,7 @@
 #endif
 
 #ifdef CONFIG_DRIVER_OMAP34XX_I2C
-#define TWL4030_I2C_BUS			0
+#define TWL4030_I2C_BUS			1
 #endif
 
 
@@ -103,7 +103,7 @@ int i2c_probe(uchar chip);
  */
 int i2c_read(uchar chip, uint addr, int alen, uchar *buffer, int len);
 int i2c_write(uchar chip, uint addr, int alen, uchar *buffer, int len);
-
+int i2c_read_byte_16bitoffset (u8 devaddr, u16 regoffset, u8 * value);
 
 /*
  * Functions for setting the current I2C bus and its speed

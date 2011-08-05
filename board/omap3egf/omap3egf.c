@@ -3,6 +3,8 @@
  * Texas Instruments, <www.ti.com>
  * Jian Zhang <jzhang@ti.com>
  * Richard Woodruff <r-woodruff2@ti.com>
+ * (C) Copyright 2011
+ * Elettronica GF S.r.l, <www.elettronicagf.it>
  *
  * See file CREDITS for list of people who contributed to this
  * project.
@@ -29,13 +31,14 @@
 #include <fat.h>
 #include <asm/arch/cpu.h>
 #include <asm/arch/bits.h>
-#include <asm/arch/mux.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/arch/sys_info.h>
 #include <asm/arch/clocks.h>
 #include <asm/arch/mem.h>
 #include <i2c.h>
+#include "./muxtool/mux_som336.h"
+#include "./muxtool/pinmux_som336.h"
 
 #define CORE_DPLL_PARAM_M2	0x09
 #define CORE_DPLL_PARAM_M	0x360
@@ -46,6 +49,53 @@
 #define CPU_DM37XX	0x1
 #define CPU_OMAP35XX	0x2
 
+/* EEPROM */
+#define EEPROM_I2C_BUS 2
+
+
+/* PRODUCT CODE */
+#define REV_STR_TO_REV_CODE(REV_STRING)\
+	(((REV_STRING[8]-'A') << 16) | ((REV_STRING[9]-'0') << 8) |  (REV_STRING[10]-'0'))
+
+#define REV_CODE(REV1,REV2,REV3)\
+	(((REV1-'A') << 16) | ((REV2-'0') << 8) |  (REV3-'0'))
+
+#define REV_NOT_PROGRAMMED  REV_CODE(0xFF,0xFF,0xFF)
+#define REV_A01  REV_CODE('A','0','1')
+#define REV_B01  REV_CODE('B','0','1')
+#define PRODUCT_VERSION_LEN  12  /* termination character included. ex: JSC0336_A02*/
+
+/* SDRAM CONSTANTS */
+#define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
+#define SDRAM_DEFAULT	MICRON1
+
+
+
+/*MICRON1 MT46H64M32LFMA_6*/
+#define SDRC_MDCFG_0_DDR_EGF_MICRON1	(0x03588019|B_ALL)
+
+#define EGF_SDRC_SHARING			0x00000100
+#define EGF_SDRC_RFR_CTRL_200MHz	0x0005e601  /* 7.8us/5ns - 50=0x5e6 */
+#define EGF_MICRON1_TDAL   6
+#define EGF_MICRON1_TDPL   3
+#define EGF_MICRON1_TRRD   2
+#define EGF_MICRON1_TRCD   3
+#define EGF_MICRON1_TRP    3
+#define EGF_MICRON1_TRAS   7
+#define EGF_MICRON1_TRC   10
+#define EGF_MICRON1_TRFC  12
+#define EGF_MICRON1_V_ACTIMA ((EGF_MICRON1_TRFC << 27) | (EGF_MICRON1_TRC << 22) | (EGF_MICRON1_TRAS << 18) \
+		| (EGF_MICRON1_TRP << 15) | (EGF_MICRON1_TRCD << 12) |(EGF_MICRON1_TRRD << 9) | \
+		(EGF_MICRON1_TDPL << 6) | (EGF_MICRON1_TDAL))
+#define EGF_MICRON1_TWTR   1
+#define EGF_MICRON1_TCKE   1
+#define EGF_MICRON1_TXP    1
+#define EGF_MICRON1_XSR    19
+#define EGF_MICRON1_V_ACTIMB ((EGF_MICRON1_TCKE << 12) | (EGF_MICRON1_XSR << 0)) | \
+				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
+
+
+static __u32 egf_product_code;
 
 /* Used to index into DPLL parameter tables */
 struct dpll_param {
@@ -121,6 +171,46 @@ u32 get_mem_type(void)
 
 
 }
+static __u32 get_product_code(void)
+{
+	__u8 product_version[PRODUCT_VERSION_LEN];
+	u32 product_code;
+	int i;
+	i2c_set_bus_num(EEPROM_I2C_BUS);
+	for(i=0; i<PRODUCT_VERSION_LEN-1; i++){
+		if(i2c_read_byte_16bitoffset(0x50, i, &product_version[i])){
+			printf("EEPROM16 read Error\n");
+		}
+	}
+	product_code = REV_STR_TO_REV_CODE(product_version);
+	if(product_code != REV_NOT_PROGRAMMED){
+		product_version[PRODUCT_VERSION_LEN-1]=0; /* add termination character */
+		printf("Product = %s RevisionCode = %x\n",product_version,product_code);
+	}
+	else {
+		printf("Eeprom not programmed. Selected Default Configuration.\n");
+	}
+	return product_code;
+}
+
+int load_revision(void)
+{
+	egf_product_code = get_product_code();
+	return 0;
+}
+
+u32 get_sdram_type(void)
+{
+	switch(egf_product_code){
+	case REV_A01:
+	case REV_B01:
+		return MICRON1;
+		break;
+	case REV_NOT_PROGRAMMED:
+	default:
+		return SDRAM_DEFAULT;
+	}
+}
 
 /******************************************
  * get_cpu_rev(void) - extract version info
@@ -169,12 +259,12 @@ int gfsom_cpu_type(void)
 {
 	u32 revision;
 	revision = __raw_readl(CONTROL_IDCODE);
-	revision=revision&0x0FFFFFFF;
-	if (revision==0xB89102F){
+	revision = revision & 0x0FFFFFFF;
+	if (revision == 0xB89102F) {
 		return CPU_DM37XX;
-	}else{
+	} else {
 		return CPU_OMAP35XX;
-	}	
+	}
 }
 
 /*****************************************************************
@@ -214,49 +304,57 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
  *********************************************************************/
 void config_3430sdram_ddr(void)
 {
+	switch (get_sdram_type()) {
+	case  MICRON1:
+
 	/* reset sdrc controller */
-	__raw_writel(SOFTRESET, SDRC_SYSCONFIG);
-	wait_on_value(BIT0, BIT0, SDRC_STATUS, 12000000);
-	__raw_writel(0, SDRC_SYSCONFIG);
+		__raw_writel(SOFTRESET, SDRC_SYSCONFIG);
+		wait_on_value(BIT0, BIT0, SDRC_STATUS, 12000000);
+		__raw_writel(0, SDRC_SYSCONFIG);
 
-	/* setup sdrc to ball mux */
-	__raw_writel(SDP_SDRC_SHARING, SDRC_SHARING);
+		/* setup sdrc to ball mux */
+		__raw_writel(EGF_SDRC_SHARING, SDRC_SHARING);
 
-	__raw_writel(0x2, SDRC_CS_CFG); /* 256MB/bank */
-	__raw_writel(SDP_SDRC_MDCFG_0_DDR_MICRON_XM, SDRC_MCFG_0);
-	__raw_writel(SDP_SDRC_MDCFG_0_DDR_MICRON_XM, SDRC_MCFG_1);
-	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_0);
-	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_0);
-	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
-	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
-	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
-	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
+		__raw_writel(0x2, SDRC_CS_CFG);
+		/* 256MB/bank */
+		__raw_writel(SDRC_MDCFG_0_DDR_EGF_MICRON1, SDRC_MCFG_0);
+		__raw_writel(SDRC_MDCFG_0_DDR_EGF_MICRON1, SDRC_MCFG_1);
+		__raw_writel(EGF_MICRON1_V_ACTIMA, SDRC_ACTIM_CTRLA_0);
+		__raw_writel(EGF_MICRON1_V_ACTIMB, SDRC_ACTIM_CTRLB_0);
+		__raw_writel(EGF_MICRON1_V_ACTIMA, SDRC_ACTIM_CTRLA_1);
+		__raw_writel(EGF_MICRON1_V_ACTIMB, SDRC_ACTIM_CTRLB_1);
+		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
+		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
 
-	__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
+		__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
 
-	/* init sequence for mDDR/mSDR using manual commands (DDR is different) */
-	__raw_writel(CMD_NOP, SDRC_MANUAL_0);
-	__raw_writel(CMD_NOP, SDRC_MANUAL_1);
+		/* init sequence for mDDR/mSDR using manual commands (DDR is different) */
+		__raw_writel(CMD_NOP, SDRC_MANUAL_0);
+		__raw_writel(CMD_NOP, SDRC_MANUAL_1);
 
-	delay(5000);
+		delay(5000);
 
-	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_0);
-	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
+		__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_0);
+		__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
 
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
 
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
 
-	/* set mr0 */
-	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_0);
-	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
+		/* set mr0 */
+		__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_0);
+		__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
 
-	/* set up dll */
-	__raw_writel(SDP_SDRC_DLLAB_CTRL, SDRC_DLLA_CTRL);
-	delay(0x2000);	/* give time to lock */
-
+		/* set up dll */
+		__raw_writel(SDP_SDRC_DLLAB_CTRL, SDRC_DLLA_CTRL);
+		delay(0x2000); /* give time to lock */
+		break;
+	default:
+		printf("RAM NOT SUPPORTED!\n");
+		hang();
+	}
 }
 #endif /* CFG_3430SDRAM_DDR */
 
@@ -556,6 +654,8 @@ int misc_init_r(void)
 		printf("eGF SOM unknown cpu");
 	}
 
+	get_sdram_type();
+
 	return 0;
 }
 
@@ -651,167 +751,6 @@ void per_clocks_enable(void)
 	delay(1000);
 }
 
-/* Set MUX for UART, GPMC, SDRC, GPIO */
-
-#define 	MUX_VAL(OFFSET,VALUE)\
-		__raw_writew((VALUE), OMAP34XX_CTRL_BASE + (OFFSET));
-
-#define		CP(x)	(CONTROL_PADCONF_##x)
-/*
- * IEN  - Input Enable
- * IDIS - Input Disable
- * PTD  - Pull type Down
- * PTU  - Pull type Up
- * DIS  - Pull type selection is inactive
- * EN   - Pull type selection is active
- * M0   - Mode 0
- * The commented string gives the final mux configuration for that pin
- */
-#define MUX_DEFAULT()\
-	MUX_VAL(CP(SDRC_D0),        (IEN  | PTD | DIS | M0)) /*SDRC_D0*/\
-	MUX_VAL(CP(SDRC_D1),        (IEN  | PTD | DIS | M0)) /*SDRC_D1*/\
-	MUX_VAL(CP(SDRC_D2),        (IEN  | PTD | DIS | M0)) /*SDRC_D2*/\
-	MUX_VAL(CP(SDRC_D3),        (IEN  | PTD | DIS | M0)) /*SDRC_D3*/\
-	MUX_VAL(CP(SDRC_D4),        (IEN  | PTD | DIS | M0)) /*SDRC_D4*/\
-	MUX_VAL(CP(SDRC_D5),        (IEN  | PTD | DIS | M0)) /*SDRC_D5*/\
-	MUX_VAL(CP(SDRC_D6),        (IEN  | PTD | DIS | M0)) /*SDRC_D6*/\
-	MUX_VAL(CP(SDRC_D7),        (IEN  | PTD | DIS | M0)) /*SDRC_D7*/\
-	MUX_VAL(CP(SDRC_D8),        (IEN  | PTD | DIS | M0)) /*SDRC_D8*/\
-	MUX_VAL(CP(SDRC_D9),        (IEN  | PTD | DIS | M0)) /*SDRC_D9*/\
-	MUX_VAL(CP(SDRC_D10),       (IEN  | PTD | DIS | M0)) /*SDRC_D10*/\
-	MUX_VAL(CP(SDRC_D11),       (IEN  | PTD | DIS | M0)) /*SDRC_D11*/\
-	MUX_VAL(CP(SDRC_D12),       (IEN  | PTD | DIS | M0)) /*SDRC_D12*/\
-	MUX_VAL(CP(SDRC_D13),       (IEN  | PTD | DIS | M0)) /*SDRC_D13*/\
-	MUX_VAL(CP(SDRC_D14),       (IEN  | PTD | DIS | M0)) /*SDRC_D14*/\
-	MUX_VAL(CP(SDRC_D15),       (IEN  | PTD | DIS | M0)) /*SDRC_D15*/\
-	MUX_VAL(CP(SDRC_D16),       (IEN  | PTD | DIS | M0)) /*SDRC_D16*/\
-	MUX_VAL(CP(SDRC_D17),       (IEN  | PTD | DIS | M0)) /*SDRC_D17*/\
-	MUX_VAL(CP(SDRC_D18),       (IEN  | PTD | DIS | M0)) /*SDRC_D18*/\
-	MUX_VAL(CP(SDRC_D19),       (IEN  | PTD | DIS | M0)) /*SDRC_D19*/\
-	MUX_VAL(CP(SDRC_D20),       (IEN  | PTD | DIS | M0)) /*SDRC_D20*/\
-	MUX_VAL(CP(SDRC_D21),       (IEN  | PTD | DIS | M0)) /*SDRC_D21*/\
-	MUX_VAL(CP(SDRC_D22),       (IEN  | PTD | DIS | M0)) /*SDRC_D22*/\
-	MUX_VAL(CP(SDRC_D23),       (IEN  | PTD | DIS | M0)) /*SDRC_D23*/\
-	MUX_VAL(CP(SDRC_D24),       (IEN  | PTD | DIS | M0)) /*SDRC_D24*/\
-	MUX_VAL(CP(SDRC_D25),       (IEN  | PTD | DIS | M0)) /*SDRC_D25*/\
-	MUX_VAL(CP(SDRC_D26),       (IEN  | PTD | DIS | M0)) /*SDRC_D26*/\
-	MUX_VAL(CP(SDRC_D27),       (IEN  | PTD | DIS | M0)) /*SDRC_D27*/\
-	MUX_VAL(CP(SDRC_D28),       (IEN  | PTD | DIS | M0)) /*SDRC_D28*/\
-	MUX_VAL(CP(SDRC_D29),       (IEN  | PTD | DIS | M0)) /*SDRC_D29*/\
-	MUX_VAL(CP(SDRC_D30),       (IEN  | PTD | DIS | M0)) /*SDRC_D30*/\
-	MUX_VAL(CP(SDRC_D31),       (IEN  | PTD | DIS | M0)) /*SDRC_D31*/\
-	MUX_VAL(CP(SDRC_CLK),       (IEN  | PTD | DIS | M0)) /*SDRC_CLK*/\
-	MUX_VAL(CP(SDRC_DQS0),      (IEN  | PTD | DIS | M0)) /*SDRC_DQS0*/\
-	MUX_VAL(CP(SDRC_DQS1),      (IEN  | PTD | DIS | M0)) /*SDRC_DQS1*/\
-	MUX_VAL(CP(SDRC_DQS2),      (IEN  | PTD | DIS | M0)) /*SDRC_DQS2*/\
-	MUX_VAL(CP(SDRC_DQS3),      (IEN  | PTD | DIS | M0)) /*SDRC_DQS3*/\
-	MUX_VAL(CP(GPMC_A1),        (IDIS | PTD | DIS | M0)) /*GPMC_A1*/\
-	MUX_VAL(CP(GPMC_A2),        (IDIS | PTD | DIS | M0)) /*GPMC_A2*/\
-	MUX_VAL(CP(GPMC_A3),        (IDIS | PTD | DIS | M0)) /*GPMC_A3*/\
-	MUX_VAL(CP(GPMC_A4),        (IDIS | PTD | DIS | M0)) /*GPMC_A4*/\
-	MUX_VAL(CP(GPMC_A5),        (IDIS | PTD | DIS | M0)) /*GPMC_A5*/\
-	MUX_VAL(CP(GPMC_A6),        (IDIS | PTD | DIS | M0)) /*GPMC_A6*/\
-	MUX_VAL(CP(GPMC_A7),        (IDIS | PTD | DIS | M0)) /*GPMC_A7*/\
-	MUX_VAL(CP(GPMC_A8),        (IDIS | PTD | DIS | M0)) /*GPMC_A8*/\
-	MUX_VAL(CP(GPMC_A9),        (IDIS | PTD | DIS | M0)) /*GPMC_A9*/\
-	MUX_VAL(CP(GPMC_A10),       (IDIS | PTD | DIS | M0)) /*GPMC_A10*/\
-	MUX_VAL(CP(GPMC_D0),        (IEN  | PTD | DIS | M0)) /*GPMC_D0*/\
-	MUX_VAL(CP(GPMC_D1),        (IEN  | PTD | DIS | M0)) /*GPMC_D1*/\
-	MUX_VAL(CP(GPMC_D2),        (IEN  | PTD | DIS | M0)) /*GPMC_D2*/\
-	MUX_VAL(CP(GPMC_D3),        (IEN  | PTD | DIS | M0)) /*GPMC_D3*/\
-	MUX_VAL(CP(GPMC_D4),        (IEN  | PTD | DIS | M0)) /*GPMC_D4*/\
-	MUX_VAL(CP(GPMC_D5),        (IEN  | PTD | DIS | M0)) /*GPMC_D5*/\
-	MUX_VAL(CP(GPMC_D6),        (IEN  | PTD | DIS | M0)) /*GPMC_D6*/\
-	MUX_VAL(CP(GPMC_D7),        (IEN  | PTD | DIS | M0)) /*GPMC_D7*/\
-	MUX_VAL(CP(GPMC_D8),        (IEN  | PTD | DIS | M0)) /*GPMC_D8*/\
-	MUX_VAL(CP(GPMC_D9),        (IEN  | PTD | DIS | M0)) /*GPMC_D9*/\
-	MUX_VAL(CP(GPMC_D10),       (IEN  | PTD | DIS | M0)) /*GPMC_D10*/\
-	MUX_VAL(CP(GPMC_D11),       (IEN  | PTD | DIS | M0)) /*GPMC_D11*/\
-	MUX_VAL(CP(GPMC_D12),       (IEN  | PTD | DIS | M0)) /*GPMC_D12*/\
-	MUX_VAL(CP(GPMC_D13),       (IEN  | PTD | DIS | M0)) /*GPMC_D13*/\
-	MUX_VAL(CP(GPMC_D14),       (IEN  | PTD | DIS | M0)) /*GPMC_D14*/\
-	MUX_VAL(CP(GPMC_D15),       (IEN  | PTD | DIS | M0)) /*GPMC_D15*/\
-	MUX_VAL(CP(GPMC_nCS0),      (IDIS | PTU | EN  | M0)) /*GPMC_nCS0*/\
-	MUX_VAL(CP(GPMC_nCS1),      (IDIS | PTU | EN  | M0)) /*GPMC_nCS1*/\
-	MUX_VAL(CP(GPMC_nCS2),      (IDIS | PTU | EN  | M0)) /*GPMC_nCS2*/\
-	MUX_VAL(CP(GPMC_nCS3),      (IDIS | PTU | EN  | M0)) /*GPMC_nCS3*/\
-	MUX_VAL(CP(GPMC_nCS4),      (IDIS | PTU | EN  | M0)) /*GPMC_nCS4*/\
-	MUX_VAL(CP(GPMC_nCS5),      (IDIS | PTD | DIS | M0)) /*GPMC_nCS5*/\
-	MUX_VAL(CP(GPMC_nCS6),      (IEN  | PTD | DIS | M1)) /*GPMC_nCS6*/\
-	MUX_VAL(CP(GPMC_nCS7),      (IEN  | PTU | EN  | M1)) /*GPMC_nCS7*/\
-	MUX_VAL(CP(GPMC_CLK),       (IDIS | PTD | DIS | M0)) /*GPMC_CLK*/\
-	MUX_VAL(CP(GPMC_nADV_ALE),  (IDIS | PTD | DIS | M0)) /*GPMC_nADV_ALE*/\
-	MUX_VAL(CP(GPMC_nOE),       (IDIS | PTD | DIS | M0)) /*GPMC_nOE*/\
-	MUX_VAL(CP(GPMC_nWE),       (IDIS | PTD | DIS | M0)) /*GPMC_nWE*/\
-	MUX_VAL(CP(GPMC_nBE0_CLE),  (IDIS | PTD | DIS | M0)) /*GPMC_nBE0_CLE*/\
-	MUX_VAL(CP(GPMC_nBE1),      (IEN  | PTD | DIS | M0)) /*GPIO_61*/\
-	MUX_VAL(CP(GPMC_nWP),       (IEN  | PTD | DIS | M0)) /*GPMC_nWP*/\
-	MUX_VAL(CP(GPMC_WAIT0),     (IEN  | PTU | EN  | M0)) /*GPMC_WAIT0*/\
-	MUX_VAL(CP(GPMC_WAIT1),     (IEN  | PTU | EN  | M0)) /*GPMC_WAIT1*/\
-	MUX_VAL(CP(GPMC_WAIT2),     (IEN  | PTU | EN  | M0)) /*GPIO_64*/\
-	MUX_VAL(CP(GPMC_WAIT3),     (IEN  | PTU | EN  | M0)) /*GPIO_65*/\
-	MUX_VAL(CP(DSS_DATA18),     (IEN  | PTD | DIS | M4)) /*GPIO_88*/\
-	MUX_VAL(CP(DSS_DATA19),     (IEN  | PTD | DIS | M4)) /*GPIO_89*/\
-	MUX_VAL(CP(DSS_DATA20),     (IEN  | PTD | DIS | M4)) /*GPIO_90*/\
-	MUX_VAL(CP(DSS_DATA21),     (IEN  | PTD | DIS | M4)) /*GPIO_91*/\
-	MUX_VAL(CP(CAM_WEN),        (IEN  | PTD | DIS | M4)) /*GPIO_167*/\
-	MUX_VAL(CP(MMC1_CLK),       (IDIS | PTU | EN  | M0)) /*MMC1_CLK*/\
-	MUX_VAL(CP(MMC1_CMD),       (IEN  | PTU | EN  | M0)) /*MMC1_CMD*/\
-	MUX_VAL(CP(MMC1_DAT0),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT0*/\
-	MUX_VAL(CP(MMC1_DAT1),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT1*/\
-	MUX_VAL(CP(MMC1_DAT2),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT2*/\
-	MUX_VAL(CP(MMC1_DAT3),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT3*/\
-	MUX_VAL(CP(MMC1_DAT4),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT4*/\
-	MUX_VAL(CP(MMC1_DAT5),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT5*/\
-	MUX_VAL(CP(MMC1_DAT6),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT6*/\
-	MUX_VAL(CP(MMC1_DAT7),      (IEN  | PTU | EN  | M0)) /*MMC1_DAT7*/\
-	MUX_VAL(CP(UART1_TX),       (IDIS | PTD | DIS | M0)) /*UART1_TX*/\
-	MUX_VAL(CP(UART1_RTS),      (IDIS | PTD | DIS | M4)) /*GPIO_149*/\
-	MUX_VAL(CP(UART1_CTS),      (IDIS | PTD | DIS | M4)) /*GPIO_150*/\
-	MUX_VAL(CP(UART1_RX),       (IEN  | PTD | DIS | M0)) /*UART1_RX*/\
-	MUX_VAL(CP(UART3_CTS_RCTX), (IEN  | PTD | EN  | M0)) /*UART3_CTS_RCTX */\
-	MUX_VAL(CP(UART3_RTS_SD),   (IDIS | PTD | DIS | M0)) /*UART3_RTS_SD */\
-	MUX_VAL(CP(UART3_RX_IRRX),  (IEN  | PTD | DIS | M0)) /*UART3_RX_IRRX*/\
-	MUX_VAL(CP(UART3_TX_IRTX),  (IDIS | PTD | DIS | M0)) /*UART3_TX_IRTX*/\
-	MUX_VAL(CP(I2C1_SCL),       (IEN  | PTU | EN  | M0)) /*I2C1_SCL*/\
-	MUX_VAL(CP(I2C1_SDA),       (IEN  | PTU | EN  | M0)) /*I2C1_SDA*/\
-	MUX_VAL(CP(I2C2_SCL),       (IEN  | PTU | EN  | M0)) /*I2C2_SCL*/\
-	MUX_VAL(CP(I2C2_SDA),       (IEN  | PTU | EN  | M0)) /*I2C2_SDA*/\
-	MUX_VAL(CP(I2C3_SCL),       (IEN  | PTU | EN  | M0)) /*I2C3_SCL*/\
-	MUX_VAL(CP(I2C3_SDA),       (IEN  | PTU | EN  | M0)) /*I2C3_SDA*/\
-	MUX_VAL(CP(I2C4_SCL),       (IEN  | PTU | EN  | M0)) /*I2C4_SCL*/\
-	MUX_VAL(CP(I2C4_SDA),       (IEN  | PTU | EN  | M0)) /*I2C4_SDA*/\
-	MUX_VAL(CP(McSPI1_CLK),     (IEN  | PTU | EN  | M4)) /*GPIO_171*/\
-	MUX_VAL(CP(McSPI1_SIMO),    (IEN  | PTU | EN  | M4)) /*GPIO_172*/\
-	MUX_VAL(CP(McSPI1_SOMI),    (IEN  | PTU | EN  | M4)) /*GPIO_173*/\
-	MUX_VAL(CP(McBSP1_DX),      (IEN  | PTD | DIS | M4)) /*GPIO_158*/\
-	MUX_VAL(CP(SYS_32K),        (IEN  | PTD | DIS | M0)) /*SYS_32K*/\
-	MUX_VAL(CP(SYS_BOOT0),      (IEN  | PTD | DIS | M4)) /*GPIO_2 */\
-	MUX_VAL(CP(SYS_BOOT1),      (IEN  | PTD | DIS | M4)) /*GPIO_3 */\
-	MUX_VAL(CP(SYS_BOOT2),      (IEN  | PTD | DIS | M4)) /*GPIO_4 */\
-	MUX_VAL(CP(SYS_BOOT3),      (IEN  | PTD | DIS | M4)) /*GPIO_5 */\
-	MUX_VAL(CP(SYS_BOOT4),      (IEN  | PTD | DIS | M4)) /*GPIO_6 */\
-	MUX_VAL(CP(SYS_BOOT5),      (IEN  | PTD | DIS | M4)) /*GPIO_7 */\
-	MUX_VAL(CP(SYS_BOOT6),      (IEN  | PTD | DIS | M4)) /*GPIO_8 */\
-	MUX_VAL(CP(SYS_CLKOUT2),    (IEN  | PTU | EN  | M4)) /*GPIO_186*/\
-	MUX_VAL(CP(JTAG_nTRST),     (IEN  | PTD | DIS | M0)) /*JTAG_nTRST*/\
-	MUX_VAL(CP(JTAG_TCK),       (IEN  | PTD | DIS | M0)) /*JTAG_TCK*/\
-	MUX_VAL(CP(JTAG_TMS),       (IEN  | PTD | DIS | M0)) /*JTAG_TMS*/\
-	MUX_VAL(CP(JTAG_TDI),       (IEN  | PTD | DIS | M0)) /*JTAG_TDI*/\
-	MUX_VAL(CP(JTAG_EMU0),      (IEN  | PTD | DIS | M0)) /*JTAG_EMU0*/\
-	MUX_VAL(CP(JTAG_EMU1),      (IEN  | PTD | DIS | M0)) /*JTAG_EMU1*/\
-	MUX_VAL(CP(ETK_CLK),        (IEN  | PTD | DIS | M4)) /*GPIO_12*/\
-	MUX_VAL(CP(ETK_CTL),        (IEN  | PTD | DIS | M4)) /*GPIO_13*/\
-	MUX_VAL(CP(ETK_D0),         (IEN  | PTD | DIS | M4)) /*GPIO_14*/\
-	MUX_VAL(CP(ETK_D1),         (IEN  | PTD | DIS | M4)) /*GPIO_15*/\
-	MUX_VAL(CP(ETK_D2),         (IEN  | PTD | DIS | M4)) /*GPIO_16*/\
-	MUX_VAL(CP(ETK_D11),        (IEN  | PTD | DIS | M4)) /*GPIO_25*/\
-	MUX_VAL(CP(ETK_D12),        (IEN  | PTD | DIS | M4)) /*GPIO_26*/\
-	MUX_VAL(CP(ETK_D13),        (IEN  | PTD | DIS | M4)) /*GPIO_27*/\
-	MUX_VAL(CP(ETK_D14),        (IEN  | PTD | DIS | M4)) /*GPIO_28*/\
-	MUX_VAL(CP(ETK_D15),        (IEN  | PTD | DIS | M4)) /*GPIO_29 */\
-	MUX_VAL(CP(sdrc_cke0),      (IDIS | PTU | EN  | M0)) /*sdrc_cke0 */\
-	MUX_VAL(CP(sdrc_cke1),      (IDIS | PTD | DIS | M7)) /*sdrc_cke1 not used*/
 
 /**********************************************************
  * Routine: set_muxconf_regs
@@ -821,7 +760,7 @@ void per_clocks_enable(void)
  *********************************************************/
 void set_muxconf_regs(void)
 {
-	MUX_DEFAULT();
+	MUX_EVM();
 }
 
 /**********************************************************
@@ -831,65 +770,6 @@ void set_muxconf_regs(void)
 
 int nand_init(void)
 {
-	/* global settings */
-	__raw_writel(0x10, GPMC_SYSCONFIG);	/* smart idle */
-	__raw_writel(0x0, GPMC_IRQENABLE);	/* isr's sources masked */
-	__raw_writel(0, GPMC_TIMEOUT_CONTROL);/* timeout disable */
-
-	/* Set the GPMC Vals, NAND is mapped at CS0, oneNAND at CS0.
-	 *  We configure only GPMC CS0 with required values. Configiring other devices
-	 *  at other CS is done in u-boot. So we don't have to bother doing it here.
-	 */
-	__raw_writel(0 , GPMC_CONFIG7 + GPMC_CONFIG_CS0);
-	delay(1000);
-
-#ifdef CFG_NAND_K9F1G08R0A
-	if ((get_mem_type() == GPMC_NAND) || (get_mem_type() == MMC_NAND)) {
-		__raw_writel(M_NAND_GPMC_CONFIG1, GPMC_CONFIG1 + GPMC_CONFIG_CS0);
-		__raw_writel(M_NAND_GPMC_CONFIG2, GPMC_CONFIG2 + GPMC_CONFIG_CS0);
-		__raw_writel(M_NAND_GPMC_CONFIG3, GPMC_CONFIG3 + GPMC_CONFIG_CS0);
-		__raw_writel(M_NAND_GPMC_CONFIG4, GPMC_CONFIG4 + GPMC_CONFIG_CS0);
-		__raw_writel(M_NAND_GPMC_CONFIG5, GPMC_CONFIG5 + GPMC_CONFIG_CS0);
-		__raw_writel(M_NAND_GPMC_CONFIG6, GPMC_CONFIG6 + GPMC_CONFIG_CS0);
-
-		/* Enable the GPMC Mapping */
-		__raw_writel((((OMAP34XX_GPMC_CS0_SIZE & 0xF)<<8) |
-			     ((NAND_BASE_ADR>>24) & 0x3F) |
-			     (1<<6)),  (GPMC_CONFIG7 + GPMC_CONFIG_CS0));
-		delay(2000);
-
-		if (nand_chip()) {
-#ifdef CFG_PRINTF
-			printf("Unsupported Chip!\n");
-#endif
-			return 1;
-		}
-	}
-#endif
-
-#ifdef CFG_ONENAND
-	if ((get_mem_type() == GPMC_ONENAND) || (get_mem_type() == MMC_ONENAND)) {
-		__raw_writel(ONENAND_GPMC_CONFIG1, GPMC_CONFIG1 + GPMC_CONFIG_CS0);
-		__raw_writel(ONENAND_GPMC_CONFIG2, GPMC_CONFIG2 + GPMC_CONFIG_CS0);
-		__raw_writel(ONENAND_GPMC_CONFIG3, GPMC_CONFIG3 + GPMC_CONFIG_CS0);
-		__raw_writel(ONENAND_GPMC_CONFIG4, GPMC_CONFIG4 + GPMC_CONFIG_CS0);
-		__raw_writel(ONENAND_GPMC_CONFIG5, GPMC_CONFIG5 + GPMC_CONFIG_CS0);
-		__raw_writel(ONENAND_GPMC_CONFIG6, GPMC_CONFIG6 + GPMC_CONFIG_CS0);
-
-		/* Enable the GPMC Mapping */
-		__raw_writel((((OMAP34XX_GPMC_CS0_SIZE & 0xF)<<8) |
-			     ((ONENAND_BASE>>24) & 0x3F) |
-			     (1<<6)),  (GPMC_CONFIG7 + GPMC_CONFIG_CS0));
-		delay(2000);
-
-		if (onenand_chip()) {
-#ifdef CFG_PRINTF
-			printf("OneNAND Unsupported !\n");
-#endif
-			return 1;
-		}
-	}
-#endif
 	return 0;
 }
 
