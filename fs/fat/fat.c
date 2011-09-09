@@ -104,7 +104,7 @@ int disk_read(__u32 startblock, __u32 getsize, __u8 * bufptr) {
 
 int fat_register_device(block_dev_desc_t *dev_desc, int part_no) {
 	unsigned char buffer[SECTOR_SIZE];
-
+	int dos_part_table_offset;
 	if (!dev_desc->block_read)
 		return -1;
 	cur_dev = dev_desc;
@@ -135,12 +135,14 @@ int fat_register_device(block_dev_desc_t *dev_desc, int part_no) {
 			return -1;
 		}
 #else
-		part_offset = buffer[DOS_PART_TBL_OFFSET + 8]
-				| buffer[DOS_PART_TBL_OFFSET + 9] << 8
-				| buffer[DOS_PART_TBL_OFFSET + 10] << 16
-				| buffer[DOS_PART_TBL_OFFSET + 11] << 24;
+		dos_part_table_offset = DOS_PART_TBL_OFFSET + (part_no-1)*16;
+		cur_part = part_no;
+		part_offset = buffer[dos_part_table_offset+8]      |
+		              buffer[dos_part_table_offset+9] <<8  |
+		              buffer[dos_part_table_offset+10]<<16 |
+		              buffer[dos_part_table_offset+11]<<24;
+		printf ("** Setting Offset Partition %d ot %d\n",part_no,part_offset);
 
-		cur_part = 1;
 #endif
 	}
 	return 0;
