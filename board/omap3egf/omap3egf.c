@@ -54,16 +54,22 @@
 
 
 /* PRODUCT CODE */
-#define REV_STR_TO_REV_CODE(REV_STRING)\
-	(((REV_STRING[8]-'A') << 16) | ((REV_STRING[9]-'0') << 8) |  (REV_STRING[10]-'0'))
+#define REV_STR_TO_REV_CODE(REV_STRING) \
+	(\
+	(((REV_STRING[3]-'0')*1000 + (REV_STRING[4]-'0')*100+(REV_STRING[5]-'0')*10 + (REV_STRING[6]-'0')) << 16)|\
+	((REV_STRING[8]-'A') << 8)|\
+	((REV_STRING[9]-'0')*10 + (REV_STRING[10]-'0'))\
+	)
 
 #define REV_CODE(REV1,REV2,REV3)\
-	(((REV1-'A') << 16) | ((REV2-'0') << 8) |  (REV3-'0'))
+	((REV1<<16) | ((REV2-'A') << 16) |  REV3)
 
-#define REV_NOT_PROGRAMMED  REV_CODE(0xFF,0xFF,0xFF)
-#define REV_A01  REV_CODE('A','0','1')
-#define REV_B01  REV_CODE('B','0','1')
+#define REV_NOT_PROGRAMMED  REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
+
+#define REV_336_A01  REV_CODE(336,'A',1)
+#define REV_336_B01  REV_CODE(336,'B',1)
 #define PRODUCT_VERSION_LEN  12  /* termination character included. ex: JSC0336_A02*/
+
 
 /* SDRAM CONSTANTS */
 #define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
@@ -202,8 +208,8 @@ int load_revision(void)
 u32 get_sdram_type(void)
 {
 	switch(egf_product_code){
-	case REV_A01:
-	case REV_B01:
+	case REV_336_A01:
+	case REV_336_B01:
 		return MICRON1;
 		break;
 	case REV_NOT_PROGRAMMED:
