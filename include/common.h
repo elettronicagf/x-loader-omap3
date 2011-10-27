@@ -96,7 +96,7 @@ void	serial_putc   (const char);
 void	serial_puts   (const char *);
 int	serial_getc   (void);
 int	serial_tstc   (void);
-
+int serial_data_present_in_read_buffer(void);
 /* lib/printf.c */
 void	serial_printf (const char *fmt, ...);
 #endif

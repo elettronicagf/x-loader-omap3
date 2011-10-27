@@ -59,6 +59,10 @@ char NS16550_getc (NS16550_t com_port)
 	while ((com_port->lsr & LSR_DR) == 0);
 	return (com_port->rbr);
 }
+int	NS16550_data_in_read_buffer(NS16550_t com_port)
+{
+	return (com_port->lsr & LSR_DR);
+}
 
 int NS16550_tstc (NS16550_t com_port)
 {
