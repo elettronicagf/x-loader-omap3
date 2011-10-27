@@ -128,3 +128,4 @@ void	NS16550_putc   (NS16550_t com_port, char c);
 char	NS16550_getc   (NS16550_t com_port);
 int	NS16550_tstc   (NS16550_t com_port);
 void	NS16550_reinit (NS16550_t com_port, int baud_divisor);
+int	    NS16550_data_in_read_buffer(NS16550_t com_port);

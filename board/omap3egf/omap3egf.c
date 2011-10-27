@@ -37,8 +37,16 @@
 #include <asm/arch/clocks.h>
 #include <asm/arch/mem.h>
 #include <i2c.h>
-#include "./muxtool/mux_som336.h"
+#include "./muxtool/pinmux_1st_stage.h"
 #include "./muxtool/pinmux_som336.h"
+#include "./muxtool/pinmux_som385.h"
+
+#ifdef CFG_3430SDRAM_DDR
+void config_3430sdram_ddr(void);
+#endif
+
+void set_muxconf_complete(void);
+void set_muxconf_just_to_load_eeprom(void);
 
 #define CORE_DPLL_PARAM_M2	0x09
 #define CORE_DPLL_PARAM_M	0x360
@@ -53,7 +61,7 @@
 #define EEPROM_I2C_BUS 2
 
 
-/* PRODUCT CODE */
+/* SOM CODE */
 #define REV_STR_TO_REV_CODE(REV_STRING) \
 	(\
 	(((REV_STRING[3]-'0')*1000 + (REV_STRING[4]-'0')*100+(REV_STRING[5]-'0')*10 + (REV_STRING[6]-'0')) << 16)|\
@@ -61,14 +69,30 @@
 	((REV_STRING[9]-'0')*10 + (REV_STRING[10]-'0'))\
 	)
 
-#define REV_CODE(REV1,REV2,REV3)\
-	((REV1<<16) | ((REV2-'A') << 16) |  REV3)
+#define SOM_REV_CODE(REV1,REV2,REV3)\
+	((REV1<<16) | ((REV2-'A') << 8) |  REV3)
 
-#define REV_NOT_PROGRAMMED  REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
+#define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
 
-#define REV_336_A01  REV_CODE(336,'A',1)
-#define REV_336_B01  REV_CODE(336,'B',1)
-#define PRODUCT_VERSION_LEN  12  /* termination character included. ex: JSC0336_A02*/
+#define N_REVISIONS	6
+char* revision_strings[N_REVISIONS]={
+		"JSF0336_A01",
+		"JSF0336_B01",
+		"JSF0336_C01",
+		"JSF0385_A01",
+		"JSF0385_B01",
+		"JSF0385_C01"
+};
+
+#define REV_336_A01  SOM_REV_CODE(336,'A',1)
+#define REV_336_B01  SOM_REV_CODE(336,'B',1)
+#define REV_336_C01  SOM_REV_CODE(336,'C',1)
+
+#define REV_385_A01  SOM_REV_CODE(385,'A',1)
+#define REV_385_B01  SOM_REV_CODE(385,'B',1)
+#define REV_385_C01  SOM_REV_CODE(385,'C',1)
+
+#define SOM_REVISION_LEN  12  /* termination character included. ex: JSC0336_A02*/
 
 
 /* SDRAM CONSTANTS */
@@ -100,8 +124,9 @@
 #define EGF_MICRON1_V_ACTIMB ((EGF_MICRON1_TCKE << 12) | (EGF_MICRON1_XSR << 0)) | \
 				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
 
+#define BYPASS_REVISION_CHECK   -1
 
-static __u32 egf_product_code;
+static __u32 egf_som_code;
 
 /* Used to index into DPLL parameter tables */
 struct dpll_param {
@@ -138,15 +163,28 @@ void udelay (unsigned long usecs) {
 	delay(usecs);
 }
 
-void init_board_gpios()
+void init_board_gpios(void)
 {
-	/* Leave tvp5150 enable and reset pins in a consistent state */
-	omap_request_gpio(163);
-	omap_request_gpio(164);
-	omap_set_gpio_direction(163,0);
-	omap_set_gpio_direction(164,0);
-	omap_set_gpio_dataout(163,1);
-	omap_set_gpio_dataout(164,0);
+	switch(egf_som_code){
+		case REV_336_A01:
+		case REV_336_C01:
+			/* Leave tvp5150 enable and reset pins in a consistent state */
+			omap_request_gpio(163);
+			omap_request_gpio(164);
+			omap_set_gpio_direction(163,0);
+			omap_set_gpio_direction(164,0);
+			omap_set_gpio_dataout(163,1);
+			omap_set_gpio_dataout(164,0);
+			break;
+		case REV_336_B01:
+		case REV_385_A01:
+		case REV_385_B01:
+		case REV_385_C01:
+			break;
+		case REV_NOT_PROGRAMMED:
+		default:
+			return;
+	}
 	return;
 }
 
@@ -156,6 +194,9 @@ void init_board_gpios()
  *****************************************/
 int board_init(void)
 {
+	printf("Board init...\n");
+	set_muxconf_complete();
+	config_3430sdram_ddr();
 	init_board_gpios();
 	return 0;
 }
@@ -190,39 +231,112 @@ u32 get_mem_type(void)
 
 
 }
-static __u32 get_product_code(void)
+static __u32 get_som_code(void)
 {
-	__u8 product_version[PRODUCT_VERSION_LEN];
-	u32 product_code;
+	__u8 som_revision[SOM_REVISION_LEN];
+	u32 som_code;
 	int i;
 	i2c_set_bus_num(EEPROM_I2C_BUS);
-	for(i=0; i<PRODUCT_VERSION_LEN-1; i++){
-		if(i2c_read_byte_16bitoffset(0x50, i, &product_version[i])){
-			printf("EEPROM16 read Error\n");
+	printf("SOM REVISION=");
+	for(i=0; i<SOM_REVISION_LEN-1; i++){
+		if(i2c_read_byte_16bitoffset(0x50, i, &som_revision[i])){
+			printf("\nEEPROM16 read Error\n");
+		}
+		else{
+			printf("%c",som_revision[i]);
 		}
 	}
-	product_code = REV_STR_TO_REV_CODE(product_version);
-	if(product_code != REV_NOT_PROGRAMMED){
-		product_version[PRODUCT_VERSION_LEN-1]=0; /* add termination character */
-		printf("Product = %s RevisionCode = %x\n",product_version,product_code);
-	}
-	else {
-		printf("Eeprom not programmed. Selected Default Configuration.\n");
-	}
-	return product_code;
+	som_revision[SOM_REVISION_LEN-1]=0; /* add termination character */
+	printf("\n");
+	som_code = REV_STR_TO_REV_CODE(som_revision);
+	printf("HASH=%x\n",som_code);
+	return som_code;
 }
+static void write_revision_to_eeprom(char* rev)
+{
+	int i;
+	int ret;
+	for(i=0; i< SOM_REVISION_LEN-1;i++){
+		if((ret=i2c_write_byte_16bitoffset(0x50, i, rev[i]))){
+					printf("EEPROM16 write Error %d %d\n",i, ret);
+					hang();
+		}
+		udelay(10000000);
+	}
+	/* add newline character */
+	if((ret=i2c_write_byte_16bitoffset(0x50, SOM_REVISION_LEN-1, '\n'))){
+				printf("EEPROM16 write Error %d %d\n",i, ret);
+				hang();
+	}
+}
+static int select_revision_from_menu()
+{
+	int i;
+	unsigned char c;
+	int nrev;
+	/* empty serial input fifo */
+	if (serial_data_present_in_read_buffer())
+		c = serial_getc();
 
+	while (1) {
+		printf("\n\n\n\n");
+		for (i = 0; i < N_REVISIONS; i++) {
+			printf("%d) %s [%x] \n", i+1, revision_strings[i],REV_STR_TO_REV_CODE(revision_strings[i]));
+		}
+		printf("%d) BYPASS CHECK\n", N_REVISIONS+1);
+		printf("SELECT ITEM (1-%d)\n", N_REVISIONS+1);
+		c = serial_getc();
+		nrev = c - '1';
+		if(nrev <  0 ||  nrev > N_REVISIONS )
+			continue;
+		else if (nrev==N_REVISIONS)
+			return BYPASS_REVISION_CHECK;
+		else {
+			write_revision_to_eeprom(revision_strings[nrev]);
+			return 0;
+		}
+	}
+
+
+
+}
+/* Check module revision from eeprom. If not found ask
+ * the user to select from menu the right hw version
+ */
 int load_revision(void)
 {
-	egf_product_code = get_product_code();
+
+	while (1) {
+		egf_som_code = get_som_code();
+		switch (egf_som_code) {
+		case REV_336_A01:
+		case REV_336_B01:
+		case REV_336_C01:
+		case REV_385_A01:
+		case REV_385_B01:
+		case REV_385_C01:
+			printf("SOM VALIDATED\n");
+			return 0;
+		case REV_NOT_PROGRAMMED:
+		default:
+			printf("EEPROM NOT PROGRAMMED!\n");
+			if(select_revision_from_menu() == BYPASS_REVISION_CHECK)
+				return 0;
+			else
+				continue;
+		}
+	}
 	return 0;
 }
 
 u32 get_sdram_type(void)
 {
-	switch(egf_product_code){
+	switch(egf_som_code){
 	case REV_336_A01:
 	case REV_336_B01:
+	case REV_385_A01:
+	case REV_385_B01:
+	case REV_385_C01:
 		return MICRON1;
 		break;
 	case REV_NOT_PROGRAMMED:
@@ -317,10 +431,6 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 }
 
 #ifdef CFG_3430SDRAM_DDR
-
-/*********************************************************************
- * config_3430sdram_ddr() - Init DDR on 3430SDP dev board.
- *********************************************************************/
 void config_3430sdram_ddr(void)
 {
 	switch (get_sdram_type()) {
@@ -646,11 +756,10 @@ void s_init(void)
 	__raw_writel(0x5ABF, CONTROL_SCALABLE_OMAP_OCP);
 #endif
 	try_unlock_memory();
-	set_muxconf_regs();
+	set_muxconf_just_to_load_eeprom();
 	delay(100);
 	per_clocks_enable();
 	prcm_init();
-	config_3430sdram_ddr();
 }
 
 /*******************************************************
@@ -770,15 +879,27 @@ void per_clocks_enable(void)
 }
 
 
-/**********************************************************
- * Routine: set_muxconf_regs
- * Description: Setting up the configuration Mux registers
- *              specific to the hardware. Many pins need
- *              to be moved from protect to primary mode.
- *********************************************************/
-void set_muxconf_regs(void)
+void set_muxconf_just_to_load_eeprom(void)
 {
-	MUX_EVM();
+	MUX_1ST_STAGE()
+}
+
+void set_muxconf_complete(void)
+{
+	switch (egf_som_code) {
+	case REV_336_A01:
+	case REV_336_B01:
+	case REV_336_C01:
+		MUX_SOM336()
+		break;
+	case REV_385_A01:
+	case REV_385_B01:
+	case REV_385_C01:
+		MUX_SOM385()
+		break;
+	default:
+		printf("No Muxing Info!\n");
+	}
 }
 
 /**********************************************************

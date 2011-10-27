@@ -101,6 +101,12 @@ serial_getc(void)
 }
 
 int
+serial_data_present_in_read_buffer(void)
+{
+	return NS16550_data_in_read_buffer(console);
+}
+
+int
 serial_tstc(void)
 {
 	return NS16550_tstc(console);
