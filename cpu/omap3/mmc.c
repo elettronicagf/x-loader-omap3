@@ -542,7 +542,7 @@ int mmc_init(int verbose)
 		mmc_blk_dev.removable = 0;
 		mmc_blk_dev.block_read = mmc_bread;
 
-		fat_register_device(&mmc_blk_dev, 1);
+		fat_register_device(&mmc_blk_dev, 2);
 		return 1;
 	}
 	else 

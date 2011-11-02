@@ -38,8 +38,8 @@
 #include <asm/arch/mem.h>
 #include <i2c.h>
 #include "./muxtool/pinmux_1st_stage.h"
-#include "./muxtool/pinmux_som336.h"
 #include "./muxtool/pinmux_som385.h"
+#include "revision_codes.h"
 
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void);
@@ -59,41 +59,6 @@ void set_muxconf_just_to_load_eeprom(void);
 
 /* EEPROM */
 #define EEPROM_I2C_BUS 2
-
-
-/* SOM CODE */
-#define REV_STR_TO_REV_CODE(REV_STRING) \
-	(\
-	(((REV_STRING[3]-'0')*1000 + (REV_STRING[4]-'0')*100+(REV_STRING[5]-'0')*10 + (REV_STRING[6]-'0')) << 16)|\
-	((REV_STRING[8]-'A') << 8)|\
-	((REV_STRING[9]-'0')*10 + (REV_STRING[10]-'0'))\
-	)
-
-#define SOM_REV_CODE(REV1,REV2,REV3)\
-	((REV1<<16) | ((REV2-'A') << 8) |  REV3)
-
-#define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
-
-#define N_REVISIONS	6
-char* revision_strings[N_REVISIONS]={
-		"JSF0336_A01",
-		"JSF0336_B01",
-		"JSF0336_C01",
-		"JSF0385_A01",
-		"JSF0385_B01",
-		"JSF0385_C01"
-};
-
-#define REV_336_A01  SOM_REV_CODE(336,'A',1)
-#define REV_336_B01  SOM_REV_CODE(336,'B',1)
-#define REV_336_C01  SOM_REV_CODE(336,'C',1)
-
-#define REV_385_A01  SOM_REV_CODE(385,'A',1)
-#define REV_385_B01  SOM_REV_CODE(385,'B',1)
-#define REV_385_C01  SOM_REV_CODE(385,'C',1)
-
-#define SOM_REVISION_LEN  12  /* termination character included. ex: JSC0336_A02*/
-
 
 /* SDRAM CONSTANTS */
 #define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
@@ -125,7 +90,7 @@ char* revision_strings[N_REVISIONS]={
 				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
 
 #define BYPASS_REVISION_CHECK   -1
-
+#define EEPROM_WP_GPIO		138
 static __u32 egf_som_code;
 
 /* Used to index into DPLL parameter tables */
@@ -166,17 +131,6 @@ void udelay (unsigned long usecs) {
 void init_board_gpios(void)
 {
 	switch(egf_som_code){
-		case REV_336_A01:
-		case REV_336_C01:
-			/* Leave tvp5150 enable and reset pins in a consistent state */
-			omap_request_gpio(163);
-			omap_request_gpio(164);
-			omap_set_gpio_direction(163,0);
-			omap_set_gpio_direction(164,0);
-			omap_set_gpio_dataout(163,1);
-			omap_set_gpio_dataout(164,0);
-			break;
-		case REV_336_B01:
 		case REV_385_A01:
 		case REV_385_B01:
 		case REV_385_C01:
@@ -256,6 +210,9 @@ static void write_revision_to_eeprom(char* rev)
 {
 	int i;
 	int ret;
+	omap_request_gpio(EEPROM_WP_GPIO);
+	omap_set_gpio_direction(EEPROM_WP_GPIO,0);
+	omap_set_gpio_dataout(EEPROM_WP_GPIO,1);
 	for(i=0; i< SOM_REVISION_LEN-1;i++){
 		if((ret=i2c_write_byte_16bitoffset(0x50, i, rev[i]))){
 					printf("EEPROM16 write Error %d %d\n",i, ret);
@@ -268,6 +225,8 @@ static void write_revision_to_eeprom(char* rev)
 				printf("EEPROM16 write Error %d %d\n",i, ret);
 				hang();
 	}
+	udelay(10000000);
+	omap_set_gpio_dataout(EEPROM_WP_GPIO,0);
 }
 static int select_revision_from_menu()
 {
@@ -309,9 +268,6 @@ int load_revision(void)
 	while (1) {
 		egf_som_code = get_som_code();
 		switch (egf_som_code) {
-		case REV_336_A01:
-		case REV_336_B01:
-		case REV_336_C01:
 		case REV_385_A01:
 		case REV_385_B01:
 		case REV_385_C01:
@@ -332,8 +288,6 @@ int load_revision(void)
 u32 get_sdram_type(void)
 {
 	switch(egf_som_code){
-	case REV_336_A01:
-	case REV_336_B01:
 	case REV_385_A01:
 	case REV_385_B01:
 	case REV_385_C01:
@@ -887,11 +841,6 @@ void set_muxconf_just_to_load_eeprom(void)
 void set_muxconf_complete(void)
 {
 	switch (egf_som_code) {
-	case REV_336_A01:
-	case REV_336_B01:
-	case REV_336_C01:
-		MUX_SOM336()
-		break;
 	case REV_385_A01:
 	case REV_385_B01:
 	case REV_385_C01:

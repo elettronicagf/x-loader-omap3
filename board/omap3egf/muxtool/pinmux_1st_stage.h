@@ -78,6 +78,8 @@
  MUX_VAL(CP(I2C3_SDA),		(IEN  | PTU | EN  | M0)) /*I2C3_SDA*/\
  MUX_VAL(CP(I2C4_SCL),		(IEN  | PTU | EN  | M0)) /*I2C4_SCL*/\
  MUX_VAL(CP(I2C4_SDA),		(IEN  | PTU | EN  | M0)) /*I2C4_SDA*/\
+ /* GPIO */\
+ MUX_VAL(CP(MMC2_DAT6),		(IDIS | PTU | EN  | M4)) /*GPIO_138 EEPROM_WP */\
  /*Control and debug */\
  MUX_VAL(CP(SYS_32K),		(IEN  | PTD | DIS | M0)) /*SYS_32K*/\
  MUX_VAL(CP(SYS_CLKREQ),	(IEN  | PTU | EN  | M4)) /*GPIO_1 POP_INT0 (se connesso su PCB)*/\
