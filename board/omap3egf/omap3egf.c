@@ -62,7 +62,8 @@ void set_muxconf_just_to_load_eeprom(void);
 
 /* SDRAM CONSTANTS */
 #define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
-#define SDRAM_DEFAULT	MICRON1
+#define MICRON2	2	/* MT46H32M32LFMA_6 128 MB only BANK 0 */
+#define SDRAM_DEFAULT	MICRON2
 
 
 
@@ -88,6 +89,31 @@ void set_muxconf_just_to_load_eeprom(void);
 #define EGF_MICRON1_XSR    19
 #define EGF_MICRON1_V_ACTIMB ((EGF_MICRON1_TCKE << 12) | (EGF_MICRON1_XSR << 0)) | \
 				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
+
+
+/*MICRON2 MT46H32M32LFMA_6*/
+#define SDRC_MDCFG_0_DDR_EGF_MICRON2	(0x3584019|B_ALL)
+
+#define EGF_SDRC_SHARING			0x00000100
+#define EGF_SDRC_RFR_CTRL_200MHz	0x0005e601  /* 7.8us/5ns - 50=0x5e6 */
+#define EGF_MICRON2_TDAL   6
+#define EGF_MICRON2_TDPL   3
+#define EGF_MICRON2_TRRD   2
+#define EGF_MICRON2_TRCD   3
+#define EGF_MICRON2_TRP    3
+#define EGF_MICRON2_TRAS   7
+#define EGF_MICRON2_TRC   10
+#define EGF_MICRON2_TRFC  12
+#define EGF_MICRON2_V_ACTIMA ((EGF_MICRON2_TRFC << 27) | (EGF_MICRON2_TRC << 22) | (EGF_MICRON2_TRAS << 18) \
+		| (EGF_MICRON2_TRP << 15) | (EGF_MICRON2_TRCD << 12) |(EGF_MICRON2_TRRD << 9) | \
+		(EGF_MICRON2_TDPL << 6) | (EGF_MICRON2_TDAL))
+#define EGF_MICRON2_TWTR   1
+#define EGF_MICRON2_TCKE   1
+#define EGF_MICRON2_TXP    1
+#define EGF_MICRON2_XSR    19
+#define EGF_MICRON2_V_ACTIMB ((EGF_MICRON2_TCKE << 12) | (EGF_MICRON2_XSR << 0)) | \
+				(EGF_MICRON2_TXP << 8) | (EGF_MICRON2_TWTR << 16)
+
 
 #define BYPASS_REVISION_CHECK   -1
 #define EEPROM_WP_GPIO		138
@@ -291,7 +317,7 @@ u32 get_sdram_type(void)
 	case REV_385_A01:
 	case REV_385_B01:
 	case REV_385_C01:
-		return MICRON1;
+		return MICRON2;
 		break;
 	case REV_NOT_PROGRAMMED:
 	default:
@@ -406,6 +432,52 @@ void config_3430sdram_ddr(void)
 		__raw_writel(EGF_MICRON1_V_ACTIMB, SDRC_ACTIM_CTRLB_0);
 		__raw_writel(EGF_MICRON1_V_ACTIMA, SDRC_ACTIM_CTRLA_1);
 		__raw_writel(EGF_MICRON1_V_ACTIMB, SDRC_ACTIM_CTRLB_1);
+		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
+		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
+
+		__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
+
+		/* init sequence for mDDR/mSDR using manual commands (DDR is different) */
+		__raw_writel(CMD_NOP, SDRC_MANUAL_0);
+		__raw_writel(CMD_NOP, SDRC_MANUAL_1);
+
+		delay(5000);
+
+		__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_0);
+		__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
+
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
+		__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+
+		/* set mr0 */
+		__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_0);
+		__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
+
+		/* set up dll */
+		__raw_writel(SDP_SDRC_DLLAB_CTRL, SDRC_DLLA_CTRL);
+		delay(0x2000); /* give time to lock */
+		break;
+
+	case  MICRON2:
+		/* reset sdrc controller */
+		__raw_writel(SOFTRESET, SDRC_SYSCONFIG);
+		wait_on_value(BIT0, BIT0, SDRC_STATUS, 12000000);
+		__raw_writel(0, SDRC_SYSCONFIG);
+
+		/* setup sdrc to ball mux */
+		__raw_writel(EGF_SDRC_SHARING, SDRC_SHARING);
+
+		__raw_writel(0x2, SDRC_CS_CFG);
+		/* 128MB/bank */
+		__raw_writel(SDRC_MDCFG_0_DDR_EGF_MICRON2, SDRC_MCFG_0);
+		__raw_writel(SDRC_MDCFG_0_DDR_EGF_MICRON2, SDRC_MCFG_1);
+		__raw_writel(EGF_MICRON2_V_ACTIMA, SDRC_ACTIM_CTRLA_0);
+		__raw_writel(EGF_MICRON2_V_ACTIMB, SDRC_ACTIM_CTRLB_0);
+		__raw_writel(EGF_MICRON2_V_ACTIMA, SDRC_ACTIM_CTRLA_1);
+		__raw_writel(EGF_MICRON2_V_ACTIMB, SDRC_ACTIM_CTRLB_1);
 		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
 		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
 
