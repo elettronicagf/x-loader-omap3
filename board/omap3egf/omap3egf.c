@@ -120,7 +120,6 @@ char* revision_strings[N_REVISIONS]={
 				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
 
 #define BYPASS_REVISION_CHECK   -1
-
 static __u32 egf_som_code;
 
 /* Used to index into DPLL parameter tables */
@@ -223,11 +222,21 @@ u32 get_mem_type(void)
 
 
 }
+static void reset_tvp5150(void)
+{
+	omap_request_gpio(163);
+	omap_request_gpio(164);
+	omap_set_gpio_direction(163,0);
+	omap_set_gpio_direction(164,0);
+	omap_set_gpio_dataout(163,1);
+	omap_set_gpio_dataout(164,0);
+}
 static __u32 get_som_code(void)
 {
 	__u8 som_revision[SOM_REVISION_LEN];
 	u32 som_code;
 	int i;
+	reset_tvp5150();
 	i2c_set_bus_num(EEPROM_I2C_BUS);
 	printf("SOM REVISION=");
 	for(i=0; i<SOM_REVISION_LEN-1; i++){
@@ -260,6 +269,7 @@ static void write_revision_to_eeprom(char* rev)
 				printf("EEPROM16 write Error %d %d\n",i, ret);
 				hang();
 	}
+	udelay(10000000);
 }
 static int select_revision_from_menu()
 {

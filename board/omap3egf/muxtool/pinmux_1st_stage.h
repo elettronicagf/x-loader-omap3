@@ -78,6 +78,8 @@
  MUX_VAL(CP(I2C3_SDA),		(IEN  | PTU | EN  | M0)) /*I2C3_SDA*/\
  MUX_VAL(CP(I2C4_SCL),		(IEN  | PTU | EN  | M0)) /*I2C4_SCL*/\
  MUX_VAL(CP(I2C4_SDA),		(IEN  | PTU | EN  | M0)) /*I2C4_SDA*/\
+ /*EEprom*/\
+ MUX_VAL(CP(CAM_D8),		(IEN  | PTD | EN  | M4)) /*GPIO_107 EEPROM_WP_107*/\
  /*Control and debug */\
  MUX_VAL(CP(SYS_32K),		(IEN  | PTD | DIS | M0)) /*SYS_32K*/\
  MUX_VAL(CP(SYS_CLKREQ),	(IEN  | PTU | EN  | M4)) /*GPIO_1 POP_INT0 (se connesso su PCB)*/\
@@ -90,5 +92,9 @@
  MUX_VAL(CP(SYS_BOOT6),		(IEN  | PTD | DIS | M4)) /*SYS_BOOT6*/ \
  MUX_VAL(CP(SYS_OFF_MODE),	(IEN  | PTD | DIS | M0)) /*SYS_OFF_MODE*/\
  MUX_VAL(CP(SYS_CLKOUT1),	(IEN  | PTU | EN  | M4)) /*GPIO_10 POP_TMP (se connesso su PCB)*/\
- MUX_VAL(CP(SYS_CLKOUT2),	(IEN  | PTU | EN  | M4)) /*GPIO_186 POP_INT1 (se connesso su PCB)*/
+ MUX_VAL(CP(SYS_CLKOUT2),	(IEN  | PTU | EN  | M4)) /*GPIO_186 POP_INT1 (se connesso su PCB)*/\
+ /* CONFIGURE TVP5150 IF PRESENT */\
+ MUX_VAL(CP(UART3_CTS_RCTX),	(IEN  | PTU | EN  | M4)) /*GPIO163 needed for reset TVP5150 */\
+ MUX_VAL(CP(UART3_RTS_SD),	(IEN  | PTD | EN  | M4)) /*GPIO164 needed for reset TVP5150 */
+
 #endif
