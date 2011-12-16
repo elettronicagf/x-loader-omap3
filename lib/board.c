@@ -43,7 +43,7 @@
 #endif
 #ifdef CONFIG_OMAP3_EGF
 const char version_string[] =
-	"Texas Instruments X-Loader 1.4.4ss - eGF v1.1 (" __DATE__ " - " __TIME__ ")";
+	"Texas Instruments X-Loader 1.4.4ss - eGF-0001 (" __DATE__ " - " __TIME__ ")";
 int load_revision(void);
 #else
 const char version_string[] =
