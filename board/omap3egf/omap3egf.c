@@ -73,25 +73,35 @@ void set_muxconf_just_to_load_eeprom(void);
 
 #define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
 
-#define N_REVISIONS	4
+#define N_REVISIONS	6
 char* revision_strings[N_REVISIONS]={
 		"JSF0336_A01",
 		"JSF0336_B01",
 		"JSF0336_C01",
 		"JSF0336_D01",
+		"JSF0336_E01",
+		"JSF0336_F01",
 };
 
 #define REV_336_A01  SOM_REV_CODE(336,'A',1)
 #define REV_336_B01  SOM_REV_CODE(336,'B',1)
 #define REV_336_C01  SOM_REV_CODE(336,'C',1)
 #define REV_336_D01  SOM_REV_CODE(336,'D',1)
+#define REV_336_E01  SOM_REV_CODE(336,'E',1)
+#define REV_336_F01  SOM_REV_CODE(336,'F',1)
 
 
 #define SOM_REVISION_LEN  12  /* termination character included. ex: JSC0336_A02*/
 
 
 /* SDRAM CONSTANTS */
-#define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
+/* The MICRON1 configuration works for both the 256M e 512M models
+ * The MT46H128M32L2_6 is two MT46H64M32LFMA_6 packed, one at CS0 and the other at CS1.
+ * CS1 is configured also for MT46H128M32L2_6 even if it's not present.
+ * Uboot code deactivates it when it checks the ram size in file
+ * u-boot-omap3/arch/arm/cpu/armv7/omap3/mem.c (function mem_ok)
+ */
+#define MICRON1	1	/* MT46H64M32LFMA_6 256 MB and MT46H128M32L2_6 512MB*/
 #define SDRAM_DEFAULT	MICRON1
 
 
@@ -163,6 +173,8 @@ void init_board_gpios(void)
 		case REV_336_A01:
 		case REV_336_C01:
 		case REV_336_D01:
+		case REV_336_E01:
+		case REV_336_F01:
 			/* Leave tvp5150 enable and reset pins in a consistent state */
 			omap_request_gpio(163);
 			omap_request_gpio(164);
@@ -315,6 +327,8 @@ int load_revision(void)
 		case REV_336_B01:
 		case REV_336_C01:
 		case REV_336_D01:
+		case REV_336_E01:
+		case REV_336_F01:
 			printf("SOM VALIDATED\n");
 			return 0;
 		case REV_NOT_PROGRAMMED:
@@ -336,6 +350,8 @@ u32 get_sdram_type(void)
 	case REV_336_B01:
 	case REV_336_C01:
 	case REV_336_D01:
+	case REV_336_E01:
+	case REV_336_F01:
 		return MICRON1;
 		break;
 	case REV_NOT_PROGRAMMED:
