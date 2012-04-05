@@ -415,6 +415,9 @@ int gfsom_cpu_type(void)
 	}
 }
 
+
+
+
 /*****************************************************************
  * sr32 - clear & set a value in a bit range for a 32 bit address
  *****************************************************************/
@@ -784,10 +787,18 @@ void s_init(void)
 int misc_init_r(void)
 {
 	int rev;
+	int mpu_iva_frequency;
 	rev = gfsom_cpu_type();
 	switch (rev) {
 	case CPU_DM37XX:
+		mpu_iva_frequency = __raw_readl(CONTROL_OMAP_STATUS);
+		printf("Read %d\n",mpu_iva_frequency);
 		printf("eGF SOM - DM37XX board\n");
+		if (mpu_iva_frequency==0x0){
+			printf("Max MPU clock frequency 800MHz\n");
+		}else{
+			printf("Max MPU clock frequency 1GHz\n");
+		}
 		break;
 	case CPU_OMAP35XX:
 		printf("eGF SOM - OMAP35XX board\n");
