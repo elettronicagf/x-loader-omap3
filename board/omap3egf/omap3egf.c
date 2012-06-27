@@ -36,6 +36,8 @@
 #include <asm/arch/sys_info.h>
 #include <asm/arch/clocks.h>
 #include <asm/arch/mem.h>
+#include <asm/arch-omap3/omap3_spi.h>
+#include <asm/arch-omap3/omap3_egf_cpld.h>
 #include <i2c.h>
 #include "./muxtool/pinmux_1st_stage.h"
 #include "./muxtool/pinmux_som336.h"
@@ -269,6 +271,7 @@ static void write_revision_to_eeprom(char* rev)
 {
 	int i;
 	int ret;
+	set_cpld_gpio(EEPROM_WP_107,1);
 	for(i=0; i< SOM_REVISION_LEN-1;i++){
 		if((ret=i2c_write_byte_16bitoffset(0x50, i, rev[i]))){
 					printf("EEPROM16 write Error %d %d\n",i, ret);
@@ -282,6 +285,7 @@ static void write_revision_to_eeprom(char* rev)
 				hang();
 	}
 	udelay(10000000);
+	set_cpld_gpio(EEPROM_WP_107,0);
 }
 static int select_revision_from_menu()
 {
@@ -319,7 +323,7 @@ static int select_revision_from_menu()
  */
 int load_revision(void)
 {
-
+	init_cpld_gpio();
 	while (1) {
 		egf_som_code = get_som_code();
 		switch (egf_som_code) {
@@ -775,6 +779,8 @@ void s_init(void)
 	delay(100);
 	per_clocks_enable();
 	prcm_init();
+	omap3_spi_init();
+
 }
 
 /*******************************************************
