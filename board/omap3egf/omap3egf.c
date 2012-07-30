@@ -40,13 +40,11 @@
 #include <asm/arch-omap3/omap3_egf_cpld.h>
 #include <i2c.h>
 #include "./muxtool/pinmux_1st_stage.h"
-#include "./muxtool/pinmux_som336.h"
 
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void);
 #endif
 
-void set_muxconf_complete(void);
 void set_muxconf_just_to_load_eeprom(void);
 
 #define CORE_DPLL_PARAM_M2	0x09
@@ -132,8 +130,13 @@ char* revision_strings[N_REVISIONS]={
 				(EGF_MICRON1_TXP << 8) | (EGF_MICRON1_TWTR << 16)
 
 #define BYPASS_REVISION_CHECK   -1
-static __u32 egf_som_code;
+struct egf_som {
+	__u32 code;
+	int has_tvp5150;
+	int ram_model;
+};
 
+static struct egf_som  the_som;
 /* Used to index into DPLL parameter tables */
 struct dpll_param {
 	unsigned int m;
@@ -169,29 +172,16 @@ void udelay (unsigned long usecs) {
 	delay(usecs);
 }
 
-void init_board_gpios(void)
+static void reset_tvp5150_to_free_i2cbus(void)
 {
-	switch(egf_som_code){
-		case REV_336_A01:
-		case REV_336_C01:
-		case REV_336_D01:
-		case REV_336_E01:
-		case REV_336_F01:
-			/* Leave tvp5150 enable and reset pins in a consistent state */
-			omap_request_gpio(163);
-			omap_request_gpio(164);
-			omap_set_gpio_direction(163,0);
-			omap_set_gpio_direction(164,0);
-			omap_set_gpio_dataout(163,1);
-			omap_set_gpio_dataout(164,0);
-			break;
-			break;
-		case REV_NOT_PROGRAMMED:
-		default:
-			return;
-	}
-	return;
+	omap_request_gpio(163);
+	omap_request_gpio(164);
+	omap_set_gpio_direction(163,0);
+	omap_set_gpio_direction(164,0);
+	omap_set_gpio_dataout(163,1);
+	omap_set_gpio_dataout(164,0);
 }
+
 
 /*****************************************
  * Routine: board_init
@@ -200,9 +190,7 @@ void init_board_gpios(void)
 int board_init(void)
 {
 	printf("Board init...\n");
-	set_muxconf_complete();
 	config_3430sdram_ddr();
-	init_board_gpios();
 	return 0;
 }
 
@@ -236,21 +224,12 @@ u32 get_mem_type(void)
 
 
 }
-static void reset_tvp5150(void)
-{
-	omap_request_gpio(163);
-	omap_request_gpio(164);
-	omap_set_gpio_direction(163,0);
-	omap_set_gpio_direction(164,0);
-	omap_set_gpio_dataout(163,1);
-	omap_set_gpio_dataout(164,0);
-}
 static __u32 get_som_code(void)
 {
 	__u8 som_revision[SOM_REVISION_LEN];
 	u32 som_code;
 	int i;
-	reset_tvp5150();
+	reset_tvp5150_to_free_i2cbus();
 	i2c_set_bus_num(EEPROM_I2C_BUS);
 	printf("SOM REVISION=");
 	for(i=0; i<SOM_REVISION_LEN-1; i++){
@@ -287,7 +266,7 @@ static void write_revision_to_eeprom(char* rev)
 	udelay(10000000);
 	set_cpld_gpio(EEPROM_WP_107,0);
 }
-static int select_revision_from_menu()
+static int select_revision_from_menu(void)
 {
 	int i;
 	unsigned char c;
@@ -325,18 +304,36 @@ int load_revision(void)
 {
 	init_cpld_gpio();
 	while (1) {
-		egf_som_code = get_som_code();
-		switch (egf_som_code) {
+		the_som.code = get_som_code();
+		switch (the_som.code) {
 		case REV_336_A01:
+			the_som.has_tvp5150 = 1;
+			the_som.ram_model = MICRON1;
+			return 0;
 		case REV_336_B01:
+			the_som.has_tvp5150 = 1;
+			the_som.ram_model = MICRON1;
+			return 0;
 		case REV_336_C01:
+			the_som.has_tvp5150 = 1;
+			the_som.ram_model = MICRON1;
+			return 0;
 		case REV_336_D01:
+			the_som.has_tvp5150 = 1;
+			the_som.ram_model = MICRON1;
+			return 0;
 		case REV_336_E01:
+			the_som.has_tvp5150 = 1;
+			the_som.ram_model = MICRON1;
+			return 0;
 		case REV_336_F01:
-			printf("SOM VALIDATED\n");
+			the_som.has_tvp5150 = 0;
+			the_som.ram_model = MICRON1;
 			return 0;
 		case REV_NOT_PROGRAMMED:
 		default:
+			the_som.has_tvp5150 = 0;
+			the_som.ram_model = SDRAM_DEFAULT;
 			printf("EEPROM NOT PROGRAMMED!\n");
 			if(select_revision_from_menu() == BYPASS_REVISION_CHECK)
 				return 0;
@@ -347,22 +344,6 @@ int load_revision(void)
 	return 0;
 }
 
-u32 get_sdram_type(void)
-{
-	switch(egf_som_code){
-	case REV_336_A01:
-	case REV_336_B01:
-	case REV_336_C01:
-	case REV_336_D01:
-	case REV_336_E01:
-	case REV_336_F01:
-		return MICRON1;
-		break;
-	case REV_NOT_PROGRAMMED:
-	default:
-		return SDRAM_DEFAULT;
-	}
-}
 
 /******************************************
  * get_cpu_rev(void) - extract version info
@@ -452,7 +433,7 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void)
 {
-	switch (get_sdram_type()) {
+	switch (the_som.ram_model) {
 	case  MICRON1:
 
 	/* reset sdrc controller */
@@ -802,8 +783,6 @@ int misc_init_r(void)
 		printf("eGF SOM unknown cpu");
 	}
 
-	get_sdram_type();
-
 	return 0;
 }
 
@@ -905,19 +884,7 @@ void set_muxconf_just_to_load_eeprom(void)
 	MUX_1ST_STAGE()
 }
 
-void set_muxconf_complete(void)
-{
-	switch (egf_som_code) {
-	case REV_336_A01:
-	case REV_336_B01:
-	case REV_336_C01:
-	case REV_336_D01:
-		MUX_SOM336()
-		break;
-	default:
-		printf("No Muxing Info!\n");
-	}
-}
+
 
 /**********************************************************
  * Routine: nand+_init
