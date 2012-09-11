@@ -84,7 +84,7 @@
  MUX_VAL(CP(SYS_32K),		(IEN  | PTD | DIS | M0)) /*SYS_32K*/\
  MUX_VAL(CP(SYS_CLKREQ),	(IEN  | PTU | EN  | M4)) /*GPIO_1 POP_INT0 (se connesso su PCB)*/\
  MUX_VAL(CP(SYS_BOOT0),		(IDIS | PTD | DIS | M4)) /*GPIO_2*/\
- MUX_VAL(CP(SYS_BOOT1),		(IEN  | PTD | DIS | M4)) /*GPIO_3*/\
+ MUX_VAL(CP(SYS_BOOT1),		(IEN  | PTU | EN  | M4)) /*GPIO_3*/\
  MUX_VAL(CP(SYS_BOOT2),		(IDIS | PTD | DIS | M4)) /*GPIO_4*/\
  MUX_VAL(CP(SYS_BOOT3),		(IEN  | PTD | DIS | M4)) /*GPIO_5*/\
  MUX_VAL(CP(SYS_BOOT4),		(IEN  | PTD | DIS | M4)) /*GPIO_6*/\
