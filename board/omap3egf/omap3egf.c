@@ -160,6 +160,7 @@ void init_board_gpios(void)
 		case REV_385_A01:
 		case REV_385_B01:
 		case REV_385_C01:
+		case REV_385_B02:
 			break;
 		case REV_NOT_PROGRAMMED:
 		default:
@@ -297,6 +298,7 @@ int load_revision(void)
 		case REV_385_A01:
 		case REV_385_B01:
 		case REV_385_C01:
+		case REV_385_B02:
 			printf("SOM VALIDATED\n");
 			return 0;
 		case REV_NOT_PROGRAMMED:
@@ -317,6 +319,7 @@ u32 get_sdram_type(void)
 	case REV_385_A01:
 	case REV_385_B01:
 	case REV_385_C01:
+	case REV_385_B02:
 		return MICRON2;
 		break;
 	case REV_NOT_PROGRAMMED:
@@ -916,6 +919,7 @@ void set_muxconf_complete(void)
 	case REV_385_A01:
 	case REV_385_B01:
 	case REV_385_C01:
+	case REV_385_B02:
 		MUX_SOM385()
 		break;
 	default:

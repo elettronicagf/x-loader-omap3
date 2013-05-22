@@ -13,7 +13,7 @@
 
 #define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
 
-#define N_REVISIONS	4
+#define N_REVISIONS	3
 char* revision_strings[N_REVISIONS]={
 		"JSF0385_A01",
 		"JSF0385_B01",
