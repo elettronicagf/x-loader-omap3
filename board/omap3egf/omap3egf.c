@@ -73,7 +73,7 @@ void set_muxconf_just_to_load_eeprom(void);
 
 #define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
 
-#define N_REVISIONS	7
+#define N_REVISIONS	8
 char* revision_strings[N_REVISIONS]={
 		"JSF0336_A01",
 		"JSF0336_B01",
@@ -82,6 +82,7 @@ char* revision_strings[N_REVISIONS]={
 		"JSF0336_E01",
 		"JSF0336_F01",
 		"JSF0336_F02",
+		"JSF0336_H01",
 };
 
 #define REV_336_A01  SOM_REV_CODE(336,'A',1)
@@ -91,6 +92,7 @@ char* revision_strings[N_REVISIONS]={
 #define REV_336_E01  SOM_REV_CODE(336,'E',1)
 #define REV_336_F01  SOM_REV_CODE(336,'F',1)
 #define REV_336_F02  SOM_REV_CODE(336,'F',2)
+#define REV_336_H01  SOM_REV_CODE(336,'H',1)
 
 
 #define SOM_REVISION_LEN  12  /* termination character included. ex: JSC0336_A02*/
@@ -334,6 +336,10 @@ int load_revision(void)
 			return 0;
 		case REV_336_F02:
 			the_som.has_tvp5150 = 0;
+			the_som.ram_model = MICRON1;
+			return 0;
+		case REV_336_H01:
+			the_som.has_tvp5150 = 1;
 			the_som.ram_model = MICRON1;
 			return 0;
 		case REV_NOT_PROGRAMMED:
