@@ -603,8 +603,8 @@ static int read_bootsectandvi(boot_sector *bs, volume_info *volinfo,
 __u8 do_fat_read_block[MAX_CLUSTSIZE]; /* Block buffer */
 #endif
 
-char *fnamecopy = (char*) 0x80500000;
-__u8 *do_fat_read_block =  (__u8 *) 0x80500880;
+char __attribute__((section (".data"))) fnamecopy [40];//= (char*) 0x80500000;
+__u8 __attribute__((section (".data"))) do_fat_read_block[2048];// =  (__u8 *) 0x80500880;
 
 boot_sector bs;
 volume_info volinfo;

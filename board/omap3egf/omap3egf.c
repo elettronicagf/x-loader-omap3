@@ -40,6 +40,7 @@
 #include <asm/arch-omap3/omap3_egf_cpld.h>
 #include <i2c.h>
 #include "./muxtool/pinmux_1st_stage.h"
+#include "gf_eeprom.h"
 
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void);
@@ -56,47 +57,9 @@ void set_muxconf_just_to_load_eeprom(void);
 #define CPU_DM37XX	0x1
 #define CPU_OMAP35XX	0x2
 
-/* EEPROM */
-#define EEPROM_I2C_BUS 2
-
-
-/* SOM CODE */
-#define REV_STR_TO_REV_CODE(REV_STRING) \
-	(\
-	(((REV_STRING[3]-'0')*1000 + (REV_STRING[4]-'0')*100+(REV_STRING[5]-'0')*10 + (REV_STRING[6]-'0')) << 16)|\
-	((REV_STRING[8]-'A') << 8)|\
-	((REV_STRING[9]-'0')*10 + (REV_STRING[10]-'0'))\
-	)
-
-#define SOM_REV_CODE(REV1,REV2,REV3)\
-	((REV1<<16) | ((REV2-'A') << 8) |  REV3)
-
-#define REV_NOT_PROGRAMMED  SOM_REV_CODE(((0xFF-'0')*1000 + (0xFF-'0')*100+(0xFF-'0')*10 + 0xff-'0'),'A',0xFF)
-
-#define N_REVISIONS	8
-char* revision_strings[N_REVISIONS]={
-		"JSF0336_A01",
-		"JSF0336_B01",
-		"JSF0336_C01",
-		"JSF0336_D01",
-		"JSF0336_E01",
-		"JSF0336_F01",
-		"JSF0336_F02",
-		"JSF0336_H01",
-};
-
-#define REV_336_A01  SOM_REV_CODE(336,'A',1)
-#define REV_336_B01  SOM_REV_CODE(336,'B',1)
-#define REV_336_C01  SOM_REV_CODE(336,'C',1)
-#define REV_336_D01  SOM_REV_CODE(336,'D',1)
-#define REV_336_E01  SOM_REV_CODE(336,'E',1)
-#define REV_336_F01  SOM_REV_CODE(336,'F',1)
-#define REV_336_F02  SOM_REV_CODE(336,'F',2)
-#define REV_336_H01  SOM_REV_CODE(336,'H',1)
-
-
-#define SOM_REVISION_LEN  12  /* termination character included. ex: JSC0336_A02*/
-
+/* SW REVISIONS*/
+#define REV_WID0336_AA0100 "WID0336_AA01.00"
+#define REV_WID0336_AB0100 "WID0336_AB01.00"
 
 /* SDRAM CONSTANTS */
 /* The MICRON1 configuration works for both the 256M e 512M models
@@ -105,10 +68,8 @@ char* revision_strings[N_REVISIONS]={
  * Uboot code deactivates it when it checks the ram size in file
  * u-boot-omap3/arch/arm/cpu/armv7/omap3/mem.c (function mem_ok)
  */
-#define MICRON1	1	/* MT46H64M32LFMA_6 256 MB and MT46H128M32L2_6 512MB*/
+#define MICRON1	 1	/* MT46H64M32LFMA_6 256 MB and MT46H128M32L2_6 512MB*/
 #define SDRAM_DEFAULT	MICRON1
-
-
 
 /*MICRON1 MT46H64M32LFMA_6*/
 #define SDRC_MDCFG_0_DDR_EGF_MICRON1	(0x03588019|B_ALL)
@@ -162,6 +123,18 @@ extern dpll_param *get_per_dpll_param(void);
 #define __raw_readw(a)		(*(volatile unsigned short *)(a))
 #define __raw_writew(v, a)	(*(volatile unsigned short *)(a) = (v))
 
+
+int gf_strcmp(const char * cs, const char * ct) {
+	register signed char __res;
+
+	while (1) {
+		if ((__res = *cs - *ct++) != 0 || !*cs++)
+			break;
+	}
+
+	return __res;
+}
+
 /*******************************************************
  * Routine: delay
  * Description: spinning delay to use before udelay works
@@ -176,15 +149,7 @@ void udelay (unsigned long usecs) {
 	delay(usecs);
 }
 
-static void reset_tvp5150_to_free_i2cbus(void)
-{
-	omap_request_gpio(163);
-	omap_request_gpio(164);
-	omap_set_gpio_direction(163,0);
-	omap_set_gpio_direction(164,0);
-	omap_set_gpio_dataout(163,1);
-	omap_set_gpio_dataout(164,0);
-}
+
 
 
 /*****************************************
@@ -228,130 +193,40 @@ u32 get_mem_type(void)
 
 
 }
-static __u32 get_som_code(void)
-{
-	__u8 som_revision[SOM_REVISION_LEN];
-	u32 som_code;
-	int i;
-	reset_tvp5150_to_free_i2cbus();
-	i2c_set_bus_num(EEPROM_I2C_BUS);
-	printf("SOM REVISION=");
-	for(i=0; i<SOM_REVISION_LEN-1; i++){
-		if(i2c_read_byte_16bitoffset(0x50, i, &som_revision[i])){
-			printf("\nEEPROM16 read Error\n");
-		}
-		else{
-			printf("%c",som_revision[i]);
-		}
-	}
-	som_revision[SOM_REVISION_LEN-1]=0; /* add termination character */
-	printf("\n");
-	som_code = REV_STR_TO_REV_CODE(som_revision);
-	printf("HASH=%x\n",som_code);
-	return som_code;
-}
-static void write_revision_to_eeprom(char* rev)
-{
-	int i;
-	int ret;
-	set_cpld_gpio(EEPROM_WP_107,1);
-	for(i=0; i< SOM_REVISION_LEN-1;i++){
-		if((ret=i2c_write_byte_16bitoffset(0x50, i, rev[i]))){
-					printf("EEPROM16 write Error %d %d\n",i, ret);
-					hang();
-		}
-		udelay(10000000);
-	}
-	/* add newline character */
-	if((ret=i2c_write_byte_16bitoffset(0x50, SOM_REVISION_LEN-1, '\n'))){
-				printf("EEPROM16 write Error %d %d\n",i, ret);
-				hang();
-	}
-	udelay(10000000);
-	set_cpld_gpio(EEPROM_WP_107,0);
-}
-static int select_revision_from_menu(void)
-{
-	int i;
-	unsigned char c;
-	int nrev;
-	/* empty serial input fifo */
-	if (serial_data_present_in_read_buffer())
-		c = serial_getc();
 
-	while (1) {
-		printf("\n\n\n\n");
-		for (i = 0; i < N_REVISIONS; i++) {
-			printf("%d) %s [%x] \n", i+1, revision_strings[i],REV_STR_TO_REV_CODE(revision_strings[i]));
-		}
-		printf("%d) BYPASS CHECK\n", N_REVISIONS+1);
-		printf("SELECT ITEM (1-%d)\n", N_REVISIONS+1);
-		c = serial_getc();
-		nrev = c - '1';
-		if(nrev <  0 ||  nrev > N_REVISIONS )
-			continue;
-		else if (nrev==N_REVISIONS)
-			return BYPASS_REVISION_CHECK;
-		else {
-			write_revision_to_eeprom(revision_strings[nrev]);
-			return 0;
-		}
-	}
-
-
-
-}
 /* Check module revision from eeprom. If not found ask
  * the user to select from menu the right hw version
  */
 int load_revision(void)
 {
-	init_cpld_gpio();
-	while (1) {
-		the_som.code = get_som_code();
-		switch (the_som.code) {
-		case REV_336_A01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_B01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_C01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_D01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_E01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_F01:
-			the_som.has_tvp5150 = 0;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_F02:
-			the_som.has_tvp5150 = 0;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_336_H01:
-			the_som.has_tvp5150 = 1;
-			the_som.ram_model = MICRON1;
-			return 0;
-		case REV_NOT_PROGRAMMED:
-		default:
-			the_som.has_tvp5150 = 0;
-			the_som.ram_model = SDRAM_DEFAULT;
-			printf("EEPROM NOT PROGRAMMED!\n");
-			if(select_revision_from_menu() == BYPASS_REVISION_CHECK)
-				return 0;
-			else
-				continue;
-		}
+	char * egf_sw_id_code;
+	int ret;
+
+	ret = gf_load_som_revision(&egf_sw_id_code,0);
+	if (ret)
+	{
+		printf("System Hang.\n");
+		while(1);
+	}
+
+	if(!gf_strcmp(egf_sw_id_code,REV_WID0336_AA0100))
+	{
+		/* SW Revision is WID0336_AA01.00 */
+		printf("GF Software ID Code: WID0336_AA01.00\n");
+		the_som.has_tvp5150 = 1;
+		the_som.ram_model = MICRON1;
+	}
+	else if(!gf_strcmp(egf_sw_id_code,REV_WID0336_AB0100))
+	{
+		/* SW Revision is WID0336_AB01.00 */
+		printf("GF Software ID Code: WID0336_AB01.00\n");
+		the_som.has_tvp5150 = 0;
+		the_som.ram_model = MICRON1;
+	}
+	else {
+		printf("Unrecognized EGF SW ID Code: %s\n",egf_sw_id_code);
+		printf("System Hang.\n");
+		while(1);
 	}
 	return 0;
 }
@@ -447,7 +322,6 @@ void config_3430sdram_ddr(void)
 {
 	switch (the_som.ram_model) {
 	case  MICRON1:
-
 	/* reset sdrc controller */
 		__raw_writel(SOFTRESET, SDRC_SYSCONFIG);
 		wait_on_value(BIT0, BIT0, SDRC_STATUS, 12000000);
@@ -794,7 +668,6 @@ int misc_init_r(void)
 	default:
 		printf("eGF SOM unknown cpu");
 	}
-
 	return 0;
 }
 

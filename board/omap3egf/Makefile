@@ -25,7 +25,7 @@ include $(TOPDIR)/config.mk
 
 LIB	= lib$(BOARD).a
 
-OBJS	:= omap3egf.o 
+OBJS	:= omap3egf.o gf_eeprom.o gf_eeprom_port.o
 SOBJS	:= platform.o
 
 $(LIB):	$(OBJS) $(SOBJS)
