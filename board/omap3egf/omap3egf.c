@@ -39,7 +39,7 @@
 #include <i2c.h>
 #include "./muxtool/pinmux_1st_stage.h"
 #include "./muxtool/pinmux_som385.h"
-#include "revision_codes.h"
+#include "gf_eeprom.h"
 
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void);
@@ -57,15 +57,10 @@ void set_muxconf_just_to_load_eeprom(void);
 #define CPU_DM37XX	0x1
 #define CPU_OMAP35XX	0x2
 
-/* EEPROM */
-#define EEPROM_I2C_BUS 2
-
 /* SDRAM CONSTANTS */
 #define MICRON1	1	/* MT46H64M32LFMA_6 256 MB only BANK 0 */
 #define MICRON2	2	/* MT46H32M32LFMA_6 128 MB only BANK 0 */
 #define SDRAM_DEFAULT	MICRON2
-
-
 
 /*MICRON1 MT46H64M32LFMA_6*/
 #define SDRC_MDCFG_0_DDR_EGF_MICRON1	(0x03588019|B_ALL)
@@ -114,10 +109,14 @@ void set_muxconf_just_to_load_eeprom(void);
 #define EGF_MICRON2_V_ACTIMB ((EGF_MICRON2_TCKE << 12) | (EGF_MICRON2_XSR << 0)) | \
 				(EGF_MICRON2_TXP << 8) | (EGF_MICRON2_TWTR << 16)
 
+#define REV_WID0385_AA0101 "WID0385_AA01.01"
+#define REV_WID0385_AB0101 "WID0385_AB01.01"
 
-#define BYPASS_REVISION_CHECK   -1
-#define EEPROM_WP_GPIO		138
-static __u32 egf_som_code;
+struct egf_som {
+	int ram_model;
+};
+
+static struct egf_som the_som;
 
 /* Used to index into DPLL parameter tables */
 struct dpll_param {
@@ -140,6 +139,17 @@ extern dpll_param *get_per_dpll_param(void);
 #define __raw_readw(a)		(*(volatile unsigned short *)(a))
 #define __raw_writew(v, a)	(*(volatile unsigned short *)(a) = (v))
 
+int gf_strcmp(const char * cs, const char * ct) {
+	register signed char __res;
+
+	while (1) {
+		if ((__res = *cs - *ct++) != 0 || !*cs++)
+			break;
+	}
+
+	return __res;
+}
+
 /*******************************************************
  * Routine: delay
  * Description: spinning delay to use before udelay works
@@ -154,21 +164,6 @@ void udelay (unsigned long usecs) {
 	delay(usecs);
 }
 
-void init_board_gpios(void)
-{
-	switch(egf_som_code){
-		case REV_385_A01:
-		case REV_385_B01:
-		case REV_385_C01:
-		case REV_385_B02:
-			break;
-		case REV_NOT_PROGRAMMED:
-		default:
-			return;
-	}
-	return;
-}
-
 /*****************************************
  * Routine: board_init
  * Description: Early hardware init.
@@ -178,7 +173,6 @@ int board_init(void)
 	printf("Board init...\n");
 	set_muxconf_complete();
 	config_3430sdram_ddr();
-	init_board_gpios();
 	return 0;
 }
 
@@ -212,121 +206,42 @@ u32 get_mem_type(void)
 
 
 }
-static __u32 get_som_code(void)
-{
-	__u8 som_revision[SOM_REVISION_LEN];
-	u32 som_code;
-	int i;
-	i2c_set_bus_num(EEPROM_I2C_BUS);
-	printf("SOM REVISION=");
-	for(i=0; i<SOM_REVISION_LEN-1; i++){
-		if(i2c_read_byte_16bitoffset(0x50, i, &som_revision[i])){
-			printf("\nEEPROM16 read Error\n");
-		}
-		else{
-			printf("%c",som_revision[i]);
-		}
-	}
-	som_revision[SOM_REVISION_LEN-1]=0; /* add termination character */
-	printf("\n");
-	som_code = REV_STR_TO_REV_CODE(som_revision);
-	printf("HASH=%x\n",som_code);
-	return som_code;
-}
-static void write_revision_to_eeprom(char* rev)
-{
-	int i;
-	int ret;
-	omap_request_gpio(EEPROM_WP_GPIO);
-	omap_set_gpio_direction(EEPROM_WP_GPIO,0);
-	omap_set_gpio_dataout(EEPROM_WP_GPIO,1);
-	for(i=0; i< SOM_REVISION_LEN-1;i++){
-		if((ret=i2c_write_byte_16bitoffset(0x50, i, rev[i]))){
-					printf("EEPROM16 write Error %d %d\n",i, ret);
-					hang();
-		}
-		udelay(10000000);
-	}
-	/* add newline character */
-	if((ret=i2c_write_byte_16bitoffset(0x50, SOM_REVISION_LEN-1, '\n'))){
-				printf("EEPROM16 write Error %d %d\n",i, ret);
-				hang();
-	}
-	udelay(10000000);
-	omap_set_gpio_dataout(EEPROM_WP_GPIO,0);
-}
-static int select_revision_from_menu()
-{
-	int i;
-	unsigned char c;
-	int nrev;
-	/* empty serial input fifo */
-	if (serial_data_present_in_read_buffer())
-		c = serial_getc();
 
-	while (1) {
-		printf("\n\n\n\n");
-		for (i = 0; i < N_REVISIONS; i++) {
-			printf("%d) %s [%x] \n", i+1, revision_strings[i],REV_STR_TO_REV_CODE(revision_strings[i]));
-		}
-		printf("%d) BYPASS CHECK\n", N_REVISIONS+1);
-		printf("SELECT ITEM (1-%d)\n", N_REVISIONS+1);
-		c = serial_getc();
-		nrev = c - '1';
-		if(nrev <  0 ||  nrev > N_REVISIONS )
-			continue;
-		else if (nrev==N_REVISIONS)
-			return BYPASS_REVISION_CHECK;
-		else {
-			write_revision_to_eeprom(revision_strings[nrev]);
-			return 0;
-		}
-	}
-
-
-
-}
 /* Check module revision from eeprom. If not found ask
  * the user to select from menu the right hw version
  */
 int load_revision(void)
 {
+	char * egf_sw_id_code;
+	int ret;
 
-	while (1) {
-		egf_som_code = get_som_code();
-		switch (egf_som_code) {
-		case REV_385_A01:
-		case REV_385_B01:
-		case REV_385_C01:
-		case REV_385_B02:
-			printf("SOM VALIDATED\n");
-			return 0;
-		case REV_NOT_PROGRAMMED:
-		default:
-			printf("EEPROM NOT PROGRAMMED!\n");
-			if(select_revision_from_menu() == BYPASS_REVISION_CHECK)
-				return 0;
-			else
-				continue;
-		}
+	ret = gf_load_som_revision(&egf_sw_id_code,0);
+	if (ret)
+	{
+		printf("System Hang.\n");
+		while(1);
+	}
+
+	if(!gf_strcmp(egf_sw_id_code,REV_WID0385_AA0101))
+	{
+		/* SW Revision is WID0385_AA01.00 */
+		printf("GF Software ID Code: WID0385_AA01.01\n");
+		the_som.ram_model = MICRON2;
+	}
+	else if(!gf_strcmp(egf_sw_id_code,REV_WID0385_AB0101))
+	{
+		/* SW Revision is WID0336_AB01.00 */
+		printf("GF Software ID Code: WID0336_AB01.01\n");
+		the_som.ram_model = MICRON2;
+	}
+	else {
+		printf("Unrecognized EGF SW ID Code: %s\n",egf_sw_id_code);
+		printf("System Hang.\n");
+		while(1);
 	}
 	return 0;
 }
 
-u32 get_sdram_type(void)
-{
-	switch(egf_som_code){
-	case REV_385_A01:
-	case REV_385_B01:
-	case REV_385_C01:
-	case REV_385_B02:
-		return MICRON2;
-		break;
-	case REV_NOT_PROGRAMMED:
-	default:
-		return SDRAM_DEFAULT;
-	}
-}
 
 /******************************************
  * get_cpu_rev(void) - extract version info
@@ -416,7 +331,7 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 #ifdef CFG_3430SDRAM_DDR
 void config_3430sdram_ddr(void)
 {
-	switch (get_sdram_type()) {
+	switch (the_som.ram_model) {
 	case  MICRON1:
 
 	/* reset sdrc controller */
@@ -810,8 +725,6 @@ int misc_init_r(void)
 		printf("eGF SOM unknown cpu");
 	}
 
-	get_sdram_type();
-
 	return 0;
 }
 
@@ -915,16 +828,7 @@ void set_muxconf_just_to_load_eeprom(void)
 
 void set_muxconf_complete(void)
 {
-	switch (egf_som_code) {
-	case REV_385_A01:
-	case REV_385_B01:
-	case REV_385_C01:
-	case REV_385_B02:
-		MUX_SOM385()
-		break;
-	default:
-		printf("No Muxing Info!\n");
-	}
+	MUX_SOM385()
 }
 
 /**********************************************************
