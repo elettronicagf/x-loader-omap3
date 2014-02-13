@@ -231,7 +231,7 @@ int load_revision(void)
 	else if(!gf_strcmp(egf_sw_id_code,REV_WID0385_AB0101))
 	{
 		/* SW Revision is WID0336_AB01.00 */
-		printf("GF Software ID Code: WID0336_AB01.01\n");
+		printf("GF Software ID Code: WID0385_AB01.01\n");
 		the_som.ram_model = MICRON2;
 	}
 	else {
